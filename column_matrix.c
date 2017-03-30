@@ -1,5 +1,5 @@
 // Joshua Mazur (carpeyoyo.github.io)
-// Last Edited: Mar. 21, 2017
+// Last Edited: Mar. 29, 2017
 // Functions for working with column matrices
 // See included License file for license
 
@@ -718,43 +718,3 @@ float *ReturnCopyMatrix(float *matrix){
   return answer;
 }
 
-// Angle from matrices
-float XRotationAngle(float *matrix){
-  // Retrieves roll angle from matrix
-  // Pre: Column matrix to check
-  // Post: Returns x angle if matrix is not NULL, NAN otherwise.
-  float answer;
-  answer = NAN;
-  if (matrix != NULL){
-    answer = atanf(matrix[6] / matrix[10]);
-  }
-  return answer;
-}
-
-float YRotationAngle(float *matrix){
-  // Retrieves pitch angle from matrix
-  // Pre: Column matrix to check
-  // Post: Returns y angle if matrix is not NULL, NAN otherwise.
-  float answer;
-  float num;
-  float den;
-  answer = NAN;
-  if (matrix != NULL){
-    num = -1.0 * matrix[2];
-    den = sqrtf(powf(matrix[6],2.0) + powf(matrix[10],2.0));
-    answer = atanf(num / den);
-  }
-  return answer;
-}
-
-float ZRotationAngle(float *matrix){
-  // Retrieves yaw angle from matrix
-  // Pre: Column matrix to check
-  // Post: Returns z angle if matrix is not NULL, NAN otherwise.
-  float answer;
-  answer = NAN;
-  if (matrix != NULL){
-    answer = atanf(matrix[6] / matrix[10]);
-  }
-  return answer;
-}

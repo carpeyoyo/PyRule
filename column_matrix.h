@@ -1,5 +1,5 @@
 // Joshua Mazur (carpeyoyo.github.io)
-// Last Edited: Mar. 21, 2017
+// Last Edited: Mar. 29, 2017
 // Functions for working with column matrices
 // See included License file for license
 
@@ -51,12 +51,5 @@ float *OrthographicMatrix(float right, float left, float top, float bottom, floa
 float *PerspectiveMatrix(float right, float left, float top, float bottom, float far, float near);
 
 float *ReturnCopyMatrix(float *matrix);
-
-// Angle from matrices
-float XRotationAngle(float *matrix);
-
-float YRotationAngle(float *matrix);
-
-float ZRotationAngle(float *matrix);
 
 #endif

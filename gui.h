@@ -1,5 +1,5 @@
 // Joshua Mazur (carpeyoyo.github.io)
-// Last Edited: Mar. 21, 2017
+// Last Edited: Mar. 29, 2017
 // Code for GUI interface.
 // See included License file for license
 
@@ -8,8 +8,6 @@
 
 #include <gtk/gtk.h>
 #include "queue.h"
-#include "message_queue.h"
-#include "python_module.h"
 #include "common.h"
 #include "compute_thread.h"
 
@@ -40,19 +38,12 @@ typedef struct{
   int drawarea_height;
   // Axis Draw Area
   GtkDrawingArea *axis_draw_area;
-  // Message Queue
-  MessageQueue *message_queue;
-  // Python Module Information
-  PythonInfo *py_info;
-  int executing;
   // Program Strings 
   char *file_path;
   char *directory_path;
   // ComputeThread
   ComputeThreadInfo *compute_info;
   // Queues
-  Queue *to_python;
-  Queue *from_python;
   Queue *to_compute;
   Queue *from_compute;
   // Projection State
@@ -63,7 +54,19 @@ typedef struct{
   float *view_trans;
   Object **objects;
   size_t objects_size;
+  size_t objects_max_size;
   cairo_surface_t *canvas;
+  // Pipe/Channels Info
+  int pipefd[2];
+  int file_stdout;
+  int file_stderr;
+  GIOChannel *pipefd_channel;
+  GIOChannel *file_stdout_channel;
+  GIOChannel *file_stderr_channel;
+  guint file_stdout_watch;
+  guint file_stderr_watch;
+  // Child process PID
+  int pid;
 } AppInfo;
 
 // AppInfo Methods
@@ -76,8 +79,6 @@ void gtk_setup(int argc, char **argv, AppInfo *info);
 
 // Common Functions
 void gtk_message_printf(GtkTextBuffer *text_buffer, gchar *message);
-float degree_from_radian(float radian);
-float radian_from_degree(float degree);
 
 // Main Window
 void on_window_main_destroy(void);
@@ -112,6 +113,13 @@ void BufferOnlySpaces(GtkTextBuffer *textbuffer, gpointer user_data);
 void BufferNumberOnly(GtkTextBuffer *textbuffer, gpointer user_data);
 float retrieve_float_from_textbuffer(GtkTextBuffer *text_buffer);
 void set_textbuffer_from_float(GtkTextBuffer *text_buffer, float value);
+// Channel Functions
+gboolean pipefd_channel_function(GIOChannel *source, GIOCondition condition, gpointer data);
+gboolean print_channel_function(GIOChannel *source, GIOCondition condition, gpointer data);
+void channel_stdout_destroy(gpointer data);
+void channel_stderr_destroy(gpointer data);
+// Child Process Functions
+void child_process_function(GPid pid, gint status, gpointer g_data);
 // Timeout Function
 gboolean timeout_function(gpointer user_data);
 

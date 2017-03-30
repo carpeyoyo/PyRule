@@ -9,9 +9,6 @@
 #include "python_module_definitions.h"
 #include "column_matrix.h"
 
-#define InitialArraySize 27
-#define IncreaseArraySize 9
-
 // Static Python Info Object
 static PythonInfo *py_info = NULL;
 
@@ -380,9 +377,6 @@ int PyRuleStandardOutput_init(PyRuleStandardOutput *self, PyObject *args, PyObje
   if (PyList_Type.tp_init((PyObject *)self,args,kwds) < 0){
     answer = -1;
   }
-  else{
-    self->console_output = 0;
-  }
 
   return answer;
 }
@@ -396,41 +390,20 @@ PyObject *PyRuleStandardOutput_write(PyRuleStandardOutput *self, PyObject *args)
   char *value;
   
   if (PyArg_ParseTuple(args,"s",&value)){
-    if (self->console_output == 1){
-      printf("%s",value);
-    }
-    if (py_info != NULL){
-      MessageQueue_send(py_info->mq,value);
-    }
+    fprintf(stdout,"%s",value);
   }
   
   Py_RETURN_NONE;
 }
 
 PyObject *PyRuleStandardOutput_flush(PyRuleStandardOutput *self, PyObject *args){
-  
-  Py_RETURN_NONE;
-}
-
-PyObject *PyRuleStandardOutput_ConsoleOutput(PyRuleStandardOutput *self, PyObject *args){
-  int value;
-
-  if (PyArg_ParseTuple(args,"p",&value)){
-    if (value == 1){
-      self->console_output = 1;
-    }
-    else{
-      self->console_output = 0;
-    }
-  }
-  
+  fflush(stdout);
   Py_RETURN_NONE;
 }
 
 static PyMethodDef PyRuleStandardOutput_methods[] = {
   {"write",(PyCFunction)PyRuleStandardOutput_write,METH_VARARGS,PyDoc_STR("Write for standard output")},
   {"flush",(PyCFunction)PyRuleStandardOutput_flush,METH_VARARGS,PyDoc_STR("Flush for standard output")},
-  {"ConsoleOutput",(PyCFunction)PyRuleStandardOutput_ConsoleOutput,METH_VARARGS,PyDoc_STR("Prints output using c printf function if true.")},
   {NULL,NULL,0,NULL},
 };
 
@@ -486,9 +459,6 @@ int PyRuleStandardError_init(PyRuleStandardError *self, PyObject *args, PyObject
   if (PyList_Type.tp_init((PyObject *)self,args,kwds) < 0){
     answer = -1;
   }
-  else{
-    self->console_output = 1;
-  }
 
   return answer;
 }
@@ -502,42 +472,20 @@ PyObject *PyRuleStandardError_write(PyRuleStandardError *self, PyObject *args){
   char *value;
   
   if (PyArg_ParseTuple(args,"s",&value)){
-    if (self->console_output == 1){
-      printf("%s",value);
-    }
-    if (py_info != NULL){
-      MessageQueue_send(py_info->mq,value);
-    }
+    fprintf(stderr,"%s",value);
   }
   
   Py_RETURN_NONE;
 }
 
 PyObject *PyRuleStandardError_flush(PyRuleStandardError *self, PyObject *args){
-  Py_RETURN_NONE;
-}
-
-PyObject *PyRuleStandardError_ConsoleOutput(PyRuleStandardError *self, PyObject *args){
-  int value;
-
-  if (!PyArg_ParseTuple(args,"p",&value)){
-  }
-  else{
-    if (value == 1){
-      self->console_output = 1;
-    }
-    else{
-      self->console_output = 0;
-    }
-  }
-  
+  fflush(stderr);
   Py_RETURN_NONE;
 }
 
 static PyMethodDef PyRuleStandardError_methods[] = {
   {"write",(PyCFunction)PyRuleStandardError_write,METH_VARARGS,PyDoc_STR("Write for standard error")},
   {"flush",(PyCFunction)PyRuleStandardError_flush,METH_VARARGS,PyDoc_STR("Flush for standard error")},
-  {"ConsoleOutput",(PyCFunction)PyRuleStandardError_ConsoleOutput,METH_VARARGS,PyDoc_STR("Prints output using c printf function if true.")},
   {NULL,NULL,0,NULL},
 };
 
@@ -711,9 +659,11 @@ void SetupArgument(const char *arg, const char *filename){
 // Filepath Setup
 void SetupFilepath(const char *directory){
   wchar_t *file_path;
+  wchar_t *file_path_new;
   char *path;
   char *mpath;
   size_t mpath_size;
+  size_t file_path_new_size;
   file_path = Py_GetPath(); // Points into static storage
   path = Py_EncodeLocale(file_path,NULL);
   mpath_size = strlen(path) + strlen(directory) + 2;
@@ -722,10 +672,16 @@ void SetupFilepath(const char *directory){
   strcat(mpath,":"); // Delimiter for unix, Windows would use ";"
   strcat(mpath,path);
   PyMem_Free(path);
-  file_path = Py_DecodeLocale(mpath,NULL);
+  file_path_new = Py_DecodeLocale(mpath,&file_path_new_size);
   free(mpath);
-  Py_SetPath(file_path);
-  PyMem_RawFree(file_path);
+  if (file_path_new_size == (mpath_size - 1)){
+    PySys_SetPath(file_path_new);
+  }
+  else{
+    fprintf(stderr,"Unable to add working directory.\n");
+    fflush(stderr);
+  }
+  PyMem_RawFree(file_path_new);
 }
 
 // Main Execution of Python
@@ -746,14 +702,14 @@ void RunPython(PythonInfo *info){
       PyImport_AppendInittab("PyRule",PyInit_PyRule);
       Py_SetProgramName(program);
 
+      // Initialize
+      //Py_Initialize();
+      Py_InitializeEx(0);
+
       // Setting File Path
       if (info->directory != NULL){
 	SetupFilepath(info->directory);
       }
-      
-      // Initialize
-      //Py_Initialize();
-      Py_InitializeEx(0);
 
       // Argument List
       SetupArgument(info->arguments,info->filename);
@@ -778,107 +734,13 @@ void RunPython(PythonInfo *info){
       PyMem_RawFree(program);
     }
   }
-  else{
-    if (info != NULL){
-      MessageQueue_send(info->mq,"Failed to load file.\n");
-    }
-  }
+
+  py_info = NULL;
 }
 
-static void *RunPythonInThread_ThreadMethod(void *arg){
-  PythonInfo *info;
-  PythonInfoTo *to;
-  PythonInfoFrom *from;
-  size_t size;
-  size_t i;
-  Object **objects;
-  
-  info = (PythonInfo *) arg;
-  py_info = info;
-
-  while(1){
-    to = Queue_Next(info->to);
-    if (to == NULL){
-      break;
-    }
-    if (to->exit_state == 1){
-      break;
-    }
-
-    // Setting Properties
-    if (to->filename == NULL){
-      if (info->filename != NULL){
-	free(info->filename);
-	info->filename = NULL;
-      }
-    }
-    else{
-      if (info->filename != NULL){
-	free(info->filename);
-      }
-      size = strlen(to->filename) + 1;
-      info->filename = (char *) calloc(sizeof(char),size);
-      strcpy(info->filename,to->filename);
-    }
-    if (to->directory == NULL){
-      if (info->directory != NULL){
-	free(info->directory);
-	info->directory = NULL;
-      }
-    }
-    else{
-      if (info->directory != NULL){
-	free(info->directory);
-      }
-      size = strlen(to->directory) + 1;
-      info->directory = (char *) calloc(sizeof(char),size);
-      strcpy(info->directory,to->directory);
-    }
-    if (to->arguments == NULL){
-      if (info->arguments != NULL){
-	free(info->arguments);
-	info->arguments = NULL;
-      }
-    }
-    else{
-      if (info->arguments != NULL){
-	free(info->arguments);
-      }
-      size = strlen(to->arguments) + 1;
-      info->arguments = (char *) calloc(sizeof(char),size);
-      strcpy(info->arguments,to->arguments);
-    }
-
-    free(to);
-
-    // Running file
-    RunPython(info);
-
-    // Objects
-    if (info->from != NULL){
-      from = PythonInfoFrom_Setup();
-      if (info->objects_current_size > 0){
-	objects = (Object **) calloc(sizeof(Object *),info->objects_current_size);
-	for (i=0; i<info->objects_current_size; i++){
-	  objects[i] = Object_CreateCopy(info->objects[i]);
-	}
-	from->objects = objects;
-	from->objects_current_size = info->objects_current_size;
-      }
-      from->status = info->status;
-      Queue_Add(info->from,(void *)from);
-    }
-
-    PythonInfo_ResetDataProperties(info);
-  }
-    
-  pthread_exit(NULL);
-}
-
-PythonInfo *SetupPythonInfo(Queue *to, Queue *from){
+PythonInfo *SetupPythonInfo(void){
   // Sets up PythonInfo structure
   PythonInfo *info;
-  pthread_attr_t attr;
   
   info = (PythonInfo *) malloc(sizeof(PythonInfo));
 
@@ -891,26 +753,12 @@ PythonInfo *SetupPythonInfo(Queue *to, Queue *from){
   info->objects = NULL;
   PythonInfo_ResetDataProperties(info);
 
-  // Thread information
-  pthread_attr_init(&attr);
-  pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
-  pthread_create(&(info->thread_id),&attr,RunPythonInThread_ThreadMethod,(void *)info);
-  pthread_attr_destroy(&attr);
-
-  //Queues
-  info->to = to;
-  info->from = from;
-  
-  // Message Queue
-  info->mq = NULL;
-
   return info;
 }
 
 void CleanupPythonInfo(PythonInfo *obj){
   // Cleanup of PythonInfo Structure
   size_t i;
-  PythonInfoTo *to;
   if (obj != NULL){
     if (obj->filename != NULL){
       free(obj->filename);
@@ -927,14 +775,6 @@ void CleanupPythonInfo(PythonInfo *obj){
       }
       free(obj->objects);
     }
-    // Finish Thread
-    if (obj->to != NULL){
-      to = PythonInfoTo_Setup(obj->to,obj->from);
-      to->exit_state = 1;
-      Queue_Add(obj->to,(void *)to);
-    }
-    pthread_join(obj->thread_id,NULL);
-    free(obj);
   }
 }
 

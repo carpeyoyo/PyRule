@@ -1,11 +1,13 @@
 // Joshua Mazur (carpeyoyo.github.io)
-// Last Edited: Mar. 21, 2017
+// Last Edited: Mar. 29, 2017
 // Generic Object and Surface definitions
 // See included License file for license
 
 #include "object.h"
 #include "column_matrix.h"
 #include <stdio.h>
+#include <string.h>
+#include <unistd.h>
 
 #define SURFACES_SIZE 10;
 
@@ -287,4 +289,152 @@ void Object_ModifyModelAngle(Object *o, float *matrix){
       o->model_angle = new_model_angle;
     }
   }
+}
+
+void Object_To_File(Object *o, int fd, int state){
+  // Saves object to given file
+  // Pre: Valid pointer to Object object and file descriptor
+  // Post: Saves data to fd as long as o is not NULL.
+  char *buffer;
+  char *position;
+  size_t buffer_size;
+  size_t i;
+  int j;
+  float *temp;
+  Surface *temp_surface;
+  if (o != NULL){
+    buffer_size = sizeof(int); // State size
+    buffer_size += sizeof(size_t); // size of current_size
+    buffer_size += o->current_size * ((sizeof(float) * 9) + (sizeof(float) * 3) + (sizeof(float) * 3)); // size of all surfaces 
+    buffer_size += 32 * sizeof(float); // size of model matrix and model_angle matrix
+
+    buffer = (char *) calloc(sizeof(char),buffer_size);
+    position = buffer;
+
+    // Saving state
+    memcpy(position,&state,sizeof(int));
+    position += sizeof(int);
+
+    // Saving size to buffer
+    memcpy(position,&(o->current_size),sizeof(size_t));
+    position += sizeof(size_t);
+    
+    // Saving surfaces data
+    for (i=0; i<o->current_size; i++){
+      temp_surface = o->surfaces[i];
+      // 3 points (9 element array)
+      temp_surface->points;
+      memcpy(position,temp_surface->points,(9 * sizeof(float)));
+      position += (9 * sizeof(float));
+      // colors
+      memcpy(position,&(temp_surface->red),sizeof(float));
+      position += sizeof(float);
+      memcpy(position,&(temp_surface->green),sizeof(float));
+      position += sizeof(float);
+      memcpy(position,&(temp_surface->blue),sizeof(float));
+      position += sizeof(float);
+      // Normal
+      if (temp_surface->normal == NULL){
+	temp = (float *) calloc(sizeof(float),3);
+	memcpy(position,temp,(sizeof(float)*3));
+	free(temp);
+	position += (3 * sizeof(float));
+      }
+      else{
+	memcpy(position,temp_surface->normal,(sizeof(float)*3));
+	position += (3 * sizeof(float));
+      }
+    }
+    // Model
+    memcpy(position,o->model,(16 * sizeof(float)));
+    position += (16 * sizeof(float));
+    // Model_angle
+    memcpy(position,o->model_angle,(16 * sizeof(float)));
+
+    // Sending buffer through pipe
+    write(fd,buffer,buffer_size);
+
+    // Freeing buffer
+    free(buffer);
+  }
+}
+
+Object *Object_From_File(int fd){
+  // Retrieves object data from fd.
+  Object *o;
+  size_t size;
+  size_t i;
+  Surface *surface;
+  float color[3];
+  float *points;
+  ssize_t amount;
+  
+  o = (Object *) malloc(sizeof(Object));
+  o->surfaces = NULL;
+  o->size = 0;
+  o->current_size = 0;
+  o->model = NULL;
+  o->model_angle = NULL;
+
+  // Get size
+  amount = read(fd,&size,sizeof(size_t));
+  if (amount < 1){
+    free(o);
+    return NULL;
+  }
+
+  for (i=0; i<size; i++){
+    surface = Surface_Setup();
+    // Retrieve points
+    points = (float *) calloc(sizeof(float),9);
+    amount = read(fd,points,(9 * sizeof(float)));
+    if (amount < 1){
+      Surface_Cleanup(surface);
+      Object_Cleanup(o);
+      return NULL;
+    }
+    surface->points = points;
+    surface->points_size = 9;
+    // colors
+    amount = read(fd,color,(3 * sizeof(float)));
+    if (amount < 1){
+      Surface_Cleanup(surface);
+      Object_Cleanup(o);
+      return NULL;
+    }
+    surface->red = color[0];
+    surface->green = color[1];
+    surface->blue = color[2];
+    // normal
+    points = (float *) calloc(sizeof(float),3);
+    amount = read(fd,points,(3 * sizeof(float)));
+    if (amount < 1){
+      Surface_Cleanup(surface);
+      Object_Cleanup(o);
+      return NULL;
+    }
+    surface->normal = points;
+    // Appending surface
+    Object_AppendSurface(o,surface);
+  }
+
+  // model matrix
+  points = (float *) calloc(sizeof(float),16);
+  amount = read(fd,points,(16 * sizeof(float)));
+  if (amount < 1){
+    Object_Cleanup(o);
+    return NULL;
+  }
+  o->model = points;
+
+  // model_angle matrix
+  points = (float *) calloc(sizeof(float),16);
+  amount = read(fd,points,(16 * sizeof(float)));
+  if (amount < 1){
+    Object_Cleanup(o);
+    return NULL;
+  }
+  o->model_angle = points;
+    
+  return o;
 }

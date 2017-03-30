@@ -1,16 +1,19 @@
 // Joshua Mazur (carpeyoyo.github.io)
-// Last Edited: Mar. 21, 2017
+// Last Edited: Mar. 29, 2017
 // Code for GUI interface.
 // See included License file for license
 
 #include "gui.h"
 #include <gdk/gdkkeysyms.h> // GTK key Symbols
+#include <glib.h>
 #include <cairo-svg.h> // For saving SVG images
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include "column_matrix.h"
 #include <math.h>
+#include <unistd.h>
+#include <fcntl.h>
 
 #define INCREMENT 0.0174532925
 
@@ -18,6 +21,7 @@
 AppInfo *AppInfoSetup(void){
   // AppInfo Constructor
   AppInfo *info;
+  int flags;
 
   info = (AppInfo *) malloc(sizeof(AppInfo));
 
@@ -26,18 +30,9 @@ AppInfo *AppInfoSetup(void){
   info->drawarea_height = 0;
 
   // Message Queue Setup
-  info->message_queue = MessageQueue_Setup();
-
   // Queues
-  info->to_python = Queue_Setup(2);
-  info->from_python = Queue_Setup(2);
   info->to_compute = Queue_Setup(10);
   info->from_compute = Queue_Setup(10);
-
-  // Python Module Information
-  info->py_info = SetupPythonInfo(info->to_python,info->from_python);
-  info->py_info->mq = info->message_queue;
-  info->executing = 0;
 
   // Program Strings
   info->file_path = NULL;
@@ -49,10 +44,29 @@ AppInfo *AppInfoSetup(void){
   info->view_trans = IdentityMatrix();
   info->objects = NULL;
   info->objects_size = 0;
+  info->objects_max_size = 0;
   info->canvas = NULL;
 
   // Compute Thread
   info->compute_info = ComputeThread_Setup(info->to_compute,info->from_compute);
+
+  // Pipe Info
+  info->pipefd_channel = NULL;
+  info->file_stdout_channel = NULL;
+  info->file_stderr_channel = NULL;
+  info->file_stdout = -1;
+  info->file_stderr = -1;
+  info->pipefd[0] = -1;
+  info->pipefd[1] = -1;
+  pipe(info->pipefd);
+  // Settings read end file status flag as nonblocking
+  flags = fcntl(info->pipefd[0],F_GETFL); 
+  flags = flags | O_NONBLOCK;
+  fcntl(info->pipefd[0],F_SETFL,flags);
+  // Setting read end file descriptor flag to close on execve
+  flags = fcntl(info->pipefd[0],F_GETFD);
+  flags = flags | O_CLOEXEC;
+  fcntl(info->pipefd[0],F_SETFD,flags);
   
   return info;
 }
@@ -60,19 +74,7 @@ AppInfo *AppInfoSetup(void){
 void AppInfoCleanup(AppInfo *info){
   // AppInfo Destructor
   size_t i;
-  if (info != NULL){
-    // Python Module Info
-    if (info->executing == 1){
-      InterruptScript();
-      MessageQueue_clear(info->message_queue);
-    }
-
-    // Python Info
-    CleanupPythonInfo(info->py_info);
-    
-    // Message Queue Cleanup (Needs to be removed after py_info)
-    MessageQueue_Cleanup(info->message_queue);
-
+  if (info != NULL){    
     // Program Strings
     if (info->file_path != NULL){
       g_free(info->file_path);
@@ -85,8 +87,6 @@ void AppInfoCleanup(AppInfo *info){
     ComputeThread_Cleanup(info->compute_info);
 
     // Queue Cleanup
-    Queue_Cleanup(info->to_python);
-    Queue_Cleanup(info->from_python);
     Queue_Cleanup(info->to_compute);
     Queue_Cleanup(info->from_compute);
 
@@ -107,6 +107,32 @@ void AppInfoCleanup(AppInfo *info){
     }
     if (info->canvas != NULL){
       cairo_surface_destroy(info->canvas);
+    }
+
+    // Pipe Info
+    if (info->pipefd_channel != NULL){
+      g_io_channel_shutdown(info->pipefd_channel,FALSE,NULL);
+      g_io_channel_unref(info->pipefd_channel);
+    }
+    if (info->file_stdout_channel != NULL){
+      g_io_channel_shutdown(info->file_stdout_channel,FALSE,NULL);
+      g_io_channel_unref(info->file_stdout_channel);
+    }
+    if (info->file_stderr_channel != NULL){
+      g_io_channel_shutdown(info->file_stderr_channel,FALSE,NULL);
+      g_io_channel_unref(info->file_stderr_channel);
+    }
+    if (info->file_stdout != -1){
+      close(info->file_stdout);
+    }
+    if (info->file_stderr != -1){
+      close(info->file_stderr);
+    }
+    if (info->pipefd[0] != -1){
+      close(info->pipefd[0]);
+    }
+    if (info->pipefd[1] != -1){
+      close(info->pipefd[1]);
     }
     
     // Free Object
@@ -257,6 +283,11 @@ void gtk_setup(int argc, char **argv, AppInfo *info){
   gtk_widget_add_events((GtkWidget *)info->axis_draw_area,GDK_BUTTON_PRESS_MASK);
   g_signal_connect(info->axis_draw_area,"button-press-event",G_CALLBACK(draw_area_button_press_function),(void *)info);
 
+  // Adding watch on pipe
+  info->pipefd_channel = g_io_channel_unix_new(info->pipefd[0]);
+  g_io_channel_set_encoding(info->pipefd_channel,NULL,NULL);
+  g_io_add_watch(info->pipefd_channel,G_IO_IN,pipefd_channel_function,(void *)info);
+
   // Timeout Function Signal
   g_timeout_add(10,timeout_function,(void *)info);
     
@@ -275,18 +306,6 @@ void gtk_message_printf(GtkTextBuffer *text_buffer, gchar *message){
   gtk_text_buffer_insert(text_buffer,&end_iter,message,-1);
 }
 
-float degree_from_radian(float radian){
-  float answer;
-  answer = radian * 180.0 / M_PI;
-  return answer;
-}
-
-float radian_from_degree(float degree){
-  float answer;
-  answer = degree * M_PI / 180.0;
-  return answer;
-}
-
 // Main Window
 void on_window_main_destroy(void){
   // Called when window is called to destroy.
@@ -301,52 +320,104 @@ void execute_button_function(GtkButton *widget, gpointer g_data){
   size_t size;
   gchar *buffer;
   GtkTextIter start,end;
-  PythonInfoTo *py_to;
+  char *working_directory;
+  char *message;
+  char **argv;
+  gboolean status;
 
   info = (AppInfo *) g_data;
-  py_to = PythonInfoTo_Setup(info->to_python,info->from_python);
+
+  argv = (char **) calloc(sizeof(char *),6);
+
+  // Working directory
+  working_directory = (char *) calloc(sizeof(char),1000);
+  getcwd(working_directory,999);
+  size = strlen(working_directory) + 20;
+  argv[0] = (char *) calloc(sizeof(char),size);
+  strcpy(argv[0],working_directory);
+  strcat(argv[0],"/python_script");
   
-  //// Copying Strings
-  // File path
-  if (info->file_path != NULL){
-    size = strlen(info->file_path) + 1; 
-    py_to->filename = (char *) calloc(sizeof(char),size);
-    strcpy(py_to->filename,info->file_path);
+  // Filepath
+  if (info->file_path == NULL){
+    free(working_directory);
+    free(argv[0]);
+    free(argv);
+    gtk_message_printf(info->message_textbuffer,"Please enter a file.\n");
+    return; // No execution if filename not set.
   }
-  // Working Directory
-  if (info->directory_path != NULL){
+  else{
+    size = strlen(info->file_path) + 1;
+    argv[1] = (char *) calloc(sizeof(char),size);
+    strcpy(argv[1],info->file_path);
+  }
+
+  // Working directory
+  if (info->directory_path == NULL){
+    argv[2] = (char *) malloc(sizeof(char));
+    argv[2][0] = '\0';
+  }
+  else{
     size = strlen(info->directory_path) + 1;
-    py_to->directory = (char *) calloc(sizeof(char),size);
-    strcpy(py_to->directory,info->directory_path);
+    argv[2] = (char *) calloc(sizeof(char),size);
+    strcpy(argv[2],info->directory_path);
   }
-  // Arguments
+
+  // Argument List
   gtk_text_buffer_get_start_iter(info->argument_textbuffer,&start);
   gtk_text_buffer_get_end_iter(info->argument_textbuffer,&end);
   buffer = gtk_text_buffer_get_text(info->argument_textbuffer,&start,&end,FALSE);
   size = strlen(buffer) + 1;
   if (size > 1){
-    py_to->arguments = (char *) calloc(sizeof(char),size);
-    strcpy(py_to->arguments,buffer);
+    argv[3] = (char *) calloc(sizeof(char),size);
+    strcpy(argv[3],buffer);
+  }
+  else{
+    argv[3] = (char *) malloc(sizeof(char));
+    argv[3][0] = '\0';
   }
   g_free(buffer);
-  
-  // Thread now executing
-  info->executing = 1;
 
-  // Sending out information
-  if (info->to_python != NULL){
-    Queue_Add(info->to_python,(void *)py_to);
+  // PID
+  argv[4] = (char *) calloc(sizeof(char),100);
+  snprintf(argv[4],99,"%d",info->pipefd[1]);
+    
+  // Null End
+  argv[5] = NULL;
+  
+  status = g_spawn_async_with_pipes(working_directory,argv,NULL,G_SPAWN_DO_NOT_REAP_CHILD | G_SPAWN_LEAVE_DESCRIPTORS_OPEN,NULL,NULL,&(info->pid),NULL,&(info->file_stdout),&(info->file_stderr),NULL);
+  if (status == FALSE){
+    printf("Error opening child process.\n");
+  }
+  else{
+    g_child_watch_add(info->pid,child_process_function,g_data);
+    // Channels
+    info->file_stdout_channel = g_io_channel_unix_new(info->file_stdout);
+    g_io_channel_set_encoding(info->file_stdout_channel,NULL,NULL);
+    info->file_stdout_watch = g_io_add_watch_full(info->file_stdout_channel,G_PRIORITY_DEFAULT,G_IO_IN,print_channel_function,(void *)info,channel_stdout_destroy);
+    info->file_stderr_channel = g_io_channel_unix_new(info->file_stderr);
+    g_io_channel_set_encoding(info->file_stderr_channel,NULL,NULL);
+    info->file_stderr_watch = g_io_add_watch_full(info->file_stderr_channel,G_PRIORITY_DEFAULT,G_IO_IN,print_channel_function,(void *)info,channel_stderr_destroy);
   }
   
-  // Switching button sensitivity
+  free(argv[0]);
+  free(argv[1]);
+  free(argv[2]);
+  free(argv[3]);
+  free(argv[4]);
+  free(argv);
+  free(working_directory);
+
   gtk_widget_set_sensitive((GtkWidget *)info->interrupt_button,TRUE);
   gtk_widget_set_sensitive((GtkWidget *)info->execute_button,FALSE);
 }
 
 void interrupt_button_function(GtkButton *widget, gpointer g_data){
   // Function to cause interrupt in execute script
-  printf("Interrupt button Function.\n");
-  InterruptScript();
+  AppInfo *info;
+  info = (AppInfo *) g_data;
+  if (info->pid > 0){
+    kill(info->pid,SIGKILL);
+  }
 }
 
 void program_output_clear_button_function(GtkButton *widget, gpointer g_data){
@@ -1090,86 +1161,162 @@ void set_textbuffer_from_float(GtkTextBuffer *text_buffer, float value){
   }
 }
 
+// Channel Functions
+gboolean pipefd_channel_function(GIOChannel *source, GIOCondition condition, gpointer data){
+  AppInfo *info;
+  int state;
+  ssize_t size;
+  size_t i;
+  Object **new;
+  Object *temp_object;
+  
+  info = (AppInfo *) data;
+
+  size = read(info->pipefd[0],&state,sizeof(int));
+
+  switch(state){
+  case(OBJECT_NEW):
+    if (info->objects != NULL){
+      for (i=0; i<info->objects_size; i++){
+	Object_Cleanup(info->objects[i]);
+      }
+      free(info->objects);
+    }
+    info->objects = (Object **) calloc(sizeof(Object *),10);
+    info->objects_size = 0;
+    info->objects_max_size = 10;
+    temp_object = Object_From_File(info->pipefd[0]);
+    if (temp_object != NULL){
+      info->objects[0] = temp_object;
+      info->objects_size = 1;
+    }
+    break;
+  case(OBJECT_ANOTHER):
+    if (info->objects == NULL){
+      info->objects = (Object **) calloc(sizeof(Object *),10);
+      info->objects_size = 0;
+      info->objects_max_size = 10;
+    }
+    else if (info->objects_size == info->objects_max_size){
+      info->objects_max_size += 10;
+      new = (Object **) calloc(sizeof(Object *),info->objects_max_size);
+      for (i=0; i<info->objects_size; i++){
+	new[i] = info->objects[i];
+      }
+      free(info->objects);
+      info->objects = new;
+    }
+    temp_object = Object_From_File(info->pipefd[0]);
+    if (temp_object != NULL){
+      info->objects[info->objects_size] = temp_object;
+      info->objects_size += 1;
+    }
+    break;
+  case(OBJECT_END):
+    AppInfo_AddDraw(info);
+    break;
+  }
+  
+  return TRUE;
+}
+
+gboolean print_channel_function(GIOChannel *source, GIOCondition condition, gpointer data){
+  AppInfo *info;
+  char *buffer;
+  ssize_t size;
+  int file_des;
+  
+  info = (AppInfo *) data;
+
+  file_des = g_io_channel_unix_get_fd(source);
+  
+  buffer = (char *) calloc(sizeof(char),4098);
+  size = read(file_des,buffer,4096);
+  if (size > 0){
+    buffer[size] = '\0';
+    gtk_message_printf(info->message_textbuffer,buffer);
+  }
+  free(buffer);
+  
+  return TRUE;
+}
+
+static void channel_common_flush(int fd, GtkTextBuffer *text_buffer){
+  // Used by two functions below to empty out the pipe.
+  char *buffer;
+  ssize_t size;
+  int flags;
+
+  flags = fcntl(fd,F_GETFL);
+  flags = flags | O_NONBLOCK;
+  fcntl(fd,F_SETFL,flags);
+
+  buffer = (char *) calloc(sizeof(char),4098);
+  size = read(fd,buffer,4096);
+  while (size > 0){
+    buffer[size] = '\0';
+    gtk_message_printf(text_buffer,buffer);
+    size = read(fd,buffer,4096);
+  }
+  free(buffer);
+}
+
+void channel_stdout_destroy(gpointer data){
+  // Called when watch on stdout pipe removed.
+  AppInfo *info;
+
+  info = (AppInfo *) data;
+
+  channel_common_flush(info->file_stdout,info->message_textbuffer);
+  g_io_channel_shutdown(info->file_stdout_channel,FALSE,NULL);
+  g_io_channel_unref(info->file_stdout_channel);
+  info->file_stdout_channel = NULL;
+
+  close(info->file_stdout);
+  info->file_stdout = -1;
+}
+
+void channel_stderr_destroy(gpointer data){
+  // Called when watch on stderr pipe removed.
+  AppInfo *info;
+
+  info = (AppInfo *) data;
+
+  channel_common_flush(info->file_stderr,info->message_textbuffer);
+  g_io_channel_shutdown(info->file_stderr_channel,FALSE,NULL);
+  g_io_channel_unref(info->file_stderr_channel);
+  info->file_stderr_channel = NULL;
+
+  close(info->file_stderr);
+  info->file_stderr = -1;
+}
+
+// Child Process Functions
+void child_process_function(GPid pid, gint status, gpointer g_data){
+  // Called with child process exits.
+  AppInfo *info;
+
+  info = (AppInfo *) g_data;
+
+  // Switching button sensitivity
+  gtk_widget_set_sensitive((GtkWidget *)info->interrupt_button,FALSE);
+  gtk_widget_set_sensitive((GtkWidget *)info->execute_button,TRUE);
+
+  g_source_remove(info->file_stdout_watch);
+  g_source_remove(info->file_stderr_watch);
+  
+  g_spawn_close_pid(pid);
+}
+
 // Timeout Function
 gboolean timeout_function(gpointer user_data){
   // Timeout Function for polling other threads' actions
   AppInfo *info;
-  char *value, *message, *new_message;
-  size_t message_size,new_size;
-  size_t i;
-  PythonInfoFrom *from;
   ComputeInfoFrom *compute_from;
 
   info = (AppInfo *) user_data;
-  
-  // Checking Message Queue
-  value = MessageQueue_receive(info->message_queue);
-  if (value != NULL){
-    message_size = strlen(value) + 1;
-    message = (char *) calloc(sizeof(char),message_size);
-    strcpy(message,value);
-    free(value);
-    for (i=0; i<MessageQueueSize; i++){
-      value = MessageQueue_receive(info->message_queue);
-      if (value == NULL){
-	break;
-      }
-      new_size = message_size + strlen(value) + 1;
-      new_message = (char *) calloc(sizeof(char),new_size);
-      strcpy(new_message,message);
-      free(message);
-      message = new_message;
-      message_size = new_size;
-      strcat(message,value);
-      free(value);
-    }
-    gtk_message_printf(info->message_textbuffer,message);
-    free(message);
-  }
 
-  // Checking if Python thread is finished
-  if (info->executing == 1){
-    from = Queue_TryNext(info->from_python);
-    if (from != NULL){
-      info->executing = 0;
-      // End Message
-      if (from->status == 0){ // Success
-	if (from->objects_current_size == 0){ // No objects to show
-	  gtk_message_printf(info->message_textbuffer,"Script Finished.\nNo objects were shown.\n");
-	}
-	else{ // Objects to display
-	  // Display Message
-	  message = (char *) calloc(sizeof(char),1000);
-	  snprintf(message,999,"Script Finished.\nObjects to display: %lu\n",from->objects_current_size);
-	  gtk_message_printf(info->message_textbuffer,message);
-	  free(message);
-	  // Switch objects over
-	  if (info->objects != NULL){
-	    for (i=0;i<info->objects_size;i++){
-	      Object_Cleanup(info->objects[i]);
-	    }
-	    free(info->objects);
-	  }
-	  info->objects = (Object **) calloc(sizeof(Object *),from->objects_current_size);
-	  info->objects_size = from->objects_current_size;
-	  for (i=0; i<info->objects_size; i++){
-	    info->objects[i] = Object_CreateCopy(from->objects[i]);
-	  }
-	  // Call for draw
-	  AppInfo_AddDraw(info);
-	}
-      }
-      else{ // Failure
-	gtk_message_printf(info->message_textbuffer,"Script Failed.\n");
-      }
-      // Switching button sensitivity
-      gtk_widget_set_sensitive((GtkWidget *)info->interrupt_button,FALSE);
-      gtk_widget_set_sensitive((GtkWidget *)info->execute_button,TRUE);
-      // Freeing from
-      PythonInfoFrom_Cleanup(from);
-    }
-  }
-
+  // Checking if draw area needs updated.
   compute_from = Queue_TryNext(info->from_compute);
   if (compute_from != NULL){
     if (info->canvas != NULL){

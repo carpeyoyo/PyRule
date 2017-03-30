@@ -1,5 +1,5 @@
 // Joshua Mazur (carpeyoyo.github.io)
-// Last Edited: Mar. 21, 2017
+// Last Edited: Mar. 29, 2017
 // Common Information for app
 // See included License file for license
 
@@ -59,62 +59,6 @@ void ComputeInfoFrom_Cleanup(ComputeInfoFrom *info){
   if (info != NULL){
     if (info->canvas != NULL){
       cairo_surface_destroy(info->canvas);
-    }
-    free(info);
-  }
-}
-
-PythonInfoTo *PythonInfoTo_Setup(Queue *to, Queue *from){
-  // Constructor
-  PythonInfoTo *info;
-  info = (PythonInfoTo *) malloc(sizeof(PythonInfoTo));
-  if (info != NULL){
-    info->filename = NULL;
-    info->directory = NULL;
-    info->arguments = NULL;
-    info->to = to;
-    info->from = from;
-    info->exit_state = 0;
-  }
-  return info;
-}
-
-void PythonInfoTo_Cleanup(PythonInfoTo *info){
-  // Destructor
-  if (info != NULL){
-    if (info->filename != NULL){
-      free(info->filename);
-    }
-    if (info->directory != NULL){
-      free(info->directory);
-    }
-    if (info->arguments != NULL){
-      free(info->arguments);
-    }
-    free(info);
-  }
-}
-
-PythonInfoFrom *PythonInfoFrom_Setup(void){
-  // Constructor
-  PythonInfoFrom *info;
-  info = (PythonInfoFrom *) malloc(sizeof(PythonInfoFrom));
-  if (info != NULL){
-    info->objects = NULL;
-    info->objects_current_size = 0;
-    info->status = -1;
-  }
-  return info;
-}
-
-void PythonInfoFrom_Cleanup(PythonInfoFrom *info){
-  // Destructor
-  size_t i;
-  if (info != NULL){
-    if (info->objects != NULL){
-      for (i=0; i<info->objects_current_size; i++){
-	Object_Cleanup(info->objects[i]);
-      }
     }
     free(info);
   }

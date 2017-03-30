@@ -1,5 +1,5 @@
 // Joshua Mazur (carpeyoyo.github.io)
-// Last Edited: Mar. 21, 2017
+// Last Edited: Mar. 29, 2017
 // Common Information for app
 // See included License file for license
 
@@ -41,32 +41,5 @@ typedef struct{
 
 ComputeInfoFrom *ComputeInfoFrom_Setup(void);
 void ComputeInfoFrom_Cleanup(ComputeInfoFrom *info);
-
-// PythonInfoTo Object
-typedef struct{
-  // Script Properties
-  char *filename;
-  char *directory;
-  char *arguments;
-  // Queues
-  Queue *to;
-  Queue *from;
-  // Exit State
-  int exit_state; // 1 for exit 
-} PythonInfoTo;
-
-PythonInfoTo *PythonInfoTo_Setup(Queue *to, Queue *from);
-void PythonInfoTo_Cleanup(PythonInfoTo *info);
-
-typedef struct{
-  // Data Properties
-  Object **objects;
-  size_t objects_current_size;
-  // Scripts ending status
-  int status;
-} PythonInfoFrom;
-
-PythonInfoFrom *PythonInfoFrom_Setup(void);
-void PythonInfoFrom_Cleanup(PythonInfoFrom *info);
 
 #endif
