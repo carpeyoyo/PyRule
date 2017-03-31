@@ -1,5 +1,5 @@
 // Joshua Mazur (carpeyoyo.github.io)
-// Last Edited: Mar. 29, 2017
+// Last Edited: Mar. 30, 2017
 // Code for GUI interface.
 // See included License file for license
 
@@ -223,6 +223,9 @@ void gtk_setup(int argc, char **argv, AppInfo *info){
   // Save Svg Button
   info->save_svg_button = (GtkButton *) GTK_WIDGET(gtk_builder_get_object(builder,"save_svg_button"));
   g_signal_connect(info->save_svg_button,"clicked",G_CALLBACK(save_svg_button_function),(void *)info);
+
+  info->save_png_button = (GtkButton *) GTK_WIDGET(gtk_builder_get_object(builder,"save_png_button"));
+  g_signal_connect(info->save_png_button,"clicked",G_CALLBACK(save_png_button_function),(void *)info);
 
   // Positive X Axis Button
   info->positive_x_axis_button = (GtkButton *) GTK_WIDGET(gtk_builder_get_object(builder,"positive_x_axis_button"));
@@ -459,7 +462,6 @@ void program_output_copy_button_function(GtkButton *widget, gpointer g_data){
 
 void save_svg_button_function(GtkButton *widget, gpointer g_data){
   // Function to save current canvas as SVG
-  // Currently just creates a canvas and copies it to the given filename in order to test
   AppInfo *info;
   cairo_surface_t *svg_surface;
   cairo_t *svg_cr;
@@ -506,6 +508,51 @@ void save_svg_button_function(GtkButton *widget, gpointer g_data){
 	
 	cairo_destroy(svg_cr);
 	cairo_surface_destroy(svg_surface);
+	
+	// Free filename
+	g_free(filename);
+      }
+    }
+    
+    // Destroy Dialog
+    gtk_widget_destroy(dialog);  
+  }
+}
+
+void save_png_button_function(GtkButton *widget, gpointer g_data){
+  // Function saves current canvas as png.
+  AppInfo *info;
+  GtkWidget *dialog;
+  GtkFileChooser *chooser;
+  gint status;
+  char *filename;
+  GtkFileChooserAction action;
+
+  info = (AppInfo *) g_data;
+
+  if (info->canvas != NULL){    
+    // Save dialog
+    action = GTK_FILE_CHOOSER_ACTION_SAVE;
+    dialog = gtk_file_chooser_dialog_new ("Save PNG File",
+					  (GtkWindow *)info->window,
+					  action,
+					  "Cancel",
+					  GTK_RESPONSE_CANCEL,
+					  "Save",
+					  GTK_RESPONSE_ACCEPT,
+					  NULL);
+    
+    chooser = GTK_FILE_CHOOSER(dialog);
+    gtk_file_chooser_set_do_overwrite_confirmation(chooser,TRUE);
+    gtk_file_chooser_set_filename(chooser,"test.png");
+    
+    status = gtk_dialog_run(GTK_DIALOG(dialog));
+    if (status == GTK_RESPONSE_ACCEPT){
+      filename = gtk_file_chooser_get_filename(chooser);
+      
+      if (filename != NULL){
+	// PNG
+	cairo_surface_write_to_png(info->canvas,filename);
 	
 	// Free filename
 	g_free(filename);

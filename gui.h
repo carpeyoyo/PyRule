@@ -1,5 +1,5 @@
 // Joshua Mazur (carpeyoyo.github.io)
-// Last Edited: Mar. 29, 2017
+// Last Edited: Mar. 30, 2017
 // Code for GUI interface.
 // See included License file for license
 
@@ -24,6 +24,7 @@ typedef struct{
   GtkButton *output_clear_button;
   GtkButton *output_copy_button;
   GtkButton *save_svg_button;
+  GtkButton *save_png_button;
   GtkButton *positive_x_axis_button;
   GtkButton *negative_x_axis_button;
   GtkButton *positive_y_axis_button;
@@ -90,6 +91,8 @@ void interrupt_button_function(GtkButton *widget, gpointer g_data);
 void program_output_clear_button_function(GtkButton *widget, gpointer g_data);
 void program_output_copy_button_function(GtkButton *widget, gpointer g_data);
 void save_svg_button_function(GtkButton *widget, gpointer g_data);
+void save_png_button_function(GtkButton *widget, gpointer
+g_data);
 void positive_x_axis_button_function(GtkButton *widget, gpointer g_data);
 void negative_x_axis_button_function(GtkButton *widget, gpointer g_data);
 void positive_y_axis_button_function(GtkButton *widget, gpointer g_data);
