@@ -1,5 +1,5 @@
 // Joshua Mazur (carpeyoyo.github.io)
-// Last Edited: Mar. 29, 2017
+// Last Edited: Mar. 30, 2017
 // Common Information for app
 // See included License file for license
 
@@ -10,6 +10,7 @@
 #include <cairo.h>
 #include "object.h"
 #include "queue.h"
+#include "modified.h"
 
 // ComputeInfoTo Object
 typedef struct{
@@ -36,7 +37,8 @@ void *ComputeInfoTo_Cleanup(ComputeInfoTo *info);
 typedef struct{
   // Canvas Properties
   float width,height;
-  cairo_surface_t *canvas;  
+  cairo_surface_t *canvas;
+  List_Modified *modified_points;
 } ComputeInfoFrom;
 
 ComputeInfoFrom *ComputeInfoFrom_Setup(void);

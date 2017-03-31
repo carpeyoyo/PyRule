@@ -1,5 +1,5 @@
 // Joshua Mazur (carpeyoyo.github.io)
-// Last Edited: Mar. 29, 2017
+// Last Edited: Mar. 30, 2017
 // Common Information for app
 // See included License file for license
 
@@ -50,6 +50,7 @@ ComputeInfoFrom *ComputeInfoFrom_Setup(void){
   info = (ComputeInfoFrom *) malloc(sizeof(ComputeInfoFrom));
   if (info != NULL){
     info->canvas = NULL;
+    info->modified_points = NULL;
   }
   return info;
 }
@@ -59,6 +60,9 @@ void ComputeInfoFrom_Cleanup(ComputeInfoFrom *info){
   if (info != NULL){
     if (info->canvas != NULL){
       cairo_surface_destroy(info->canvas);
+    }
+    if (info->modified_points != NULL){
+      List_Modified_Cleanup(info->modified_points);
     }
     free(info);
   }

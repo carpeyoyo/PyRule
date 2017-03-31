@@ -10,6 +10,7 @@
 #include "queue.h"
 #include "common.h"
 #include "compute_thread.h"
+#include "modified.h"
 
 typedef struct{
   // GTK Widgets
@@ -68,6 +69,8 @@ typedef struct{
   guint file_stderr_watch;
   // Child process PID
   int pid;
+  // List of Modified Points
+  List_Modified *modified_points;
 } AppInfo;
 
 // AppInfo Methods

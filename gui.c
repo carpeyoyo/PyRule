@@ -67,6 +67,9 @@ AppInfo *AppInfoSetup(void){
   flags = fcntl(info->pipefd[0],F_GETFD);
   flags = flags | O_CLOEXEC;
   fcntl(info->pipefd[0],F_SETFD,flags);
+
+  // List of modified points
+  info->modified_points = NULL;
   
   return info;
 }
@@ -133,6 +136,11 @@ void AppInfoCleanup(AppInfo *info){
     }
     if (info->pipefd[1] != -1){
       close(info->pipefd[1]);
+    }
+
+    // Modified points
+    if (info->modified_points != NULL){
+      List_Modified_Cleanup(info->modified_points);
     }
     
     // Free Object
@@ -471,10 +479,15 @@ void save_svg_button_function(GtkButton *widget, gpointer g_data){
   gint status;
   char *filename;
   GtkFileChooserAction action;
+  List_Modified *list;
+  size_t i;
+  Modified *mod;
 
   info = (AppInfo *) g_data;
 
-  if (info->canvas != NULL){
+  list = info->modified_points;
+  
+  if ((list != NULL) && (list->array_current_size > 0)){
   
     x = info->drawarea_width;
     y = info->drawarea_height;
@@ -502,9 +515,16 @@ void save_svg_button_function(GtkButton *widget, gpointer g_data){
 	// SVG
 	svg_surface = cairo_svg_surface_create(filename,(double) x, (double) y);
 	svg_cr = cairo_create(svg_surface);
-	
-	cairo_set_source_surface(svg_cr,info->canvas,0,0);
-	cairo_paint(svg_cr);
+
+	for (i=0; i<list->array_current_size; i++){
+	  mod = list->array[i];
+	  cairo_set_source_rgb(svg_cr,mod->red,mod->green,mod->blue);
+	  cairo_move_to(svg_cr,mod->x1,mod->y1);
+	  cairo_line_to(svg_cr,mod->x2,mod->y2);
+	  cairo_line_to(svg_cr,mod->x3,mod->y3);
+	  cairo_close_path(svg_cr);
+	  cairo_fill(svg_cr);
+	}
 	
 	cairo_destroy(svg_cr);
 	cairo_surface_destroy(svg_surface);
@@ -1371,8 +1391,13 @@ gboolean timeout_function(gpointer user_data){
     }
     info->canvas = compute_from->canvas;
     compute_from->canvas = NULL;
-    ComputeInfoFrom_Cleanup(compute_from);
+    if (info->modified_points != NULL){
+      List_Modified_Cleanup(info->modified_points);
+    }
+    info->modified_points = compute_from->modified_points;
+    compute_from->modified_points = NULL;
     gtk_widget_queue_draw((GtkWidget *)info->drawarea);
+    ComputeInfoFrom_Cleanup(compute_from);
   }
 
   return TRUE;
