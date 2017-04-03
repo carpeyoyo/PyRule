@@ -305,7 +305,6 @@ static PyMethodDef PyRuleObject_methods[] = {
   {"rotatey",(PyCFunction)PyRuleObject_rotatey,METH_VARARGS,PyDoc_STR("Rotates Object around y axis")},
   {"rotatez",(PyCFunction)PyRuleObject_rotatez,METH_VARARGS,PyDoc_STR("Rotates Object around z axis")},
   {"color",(PyCFunction)PyRuleObject_color,METH_VARARGS,PyDoc_STR("Object color: red, green, blue.")},
-  //{"flush",(PyCFunction)PyRuleObject_flush,METH_VARARGS,PyDoc_STR("Flush for standard output")},
   {NULL,NULL,0,NULL},
 };
 

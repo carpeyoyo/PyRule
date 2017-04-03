@@ -1,4 +1,4 @@
-all: pyrule python_script
+all: pyrule python_script save_script
 
 modified.o: modified.c modified.h
 	gcc modified.c -c 
@@ -22,7 +22,13 @@ object.o: object.c object.h
 	gcc object.c -c 
 
 python_script: python_module.o column_matrix.o python_script.c object.o
-	gcc object.o python_module.o column_matrix.o python_script.c -o python_script -L/usr/lib/python3.6/config-3.6m-x86_64-linux-gnu -L/usr/lib -lpython3.6m -lpthread -ldl  -lutil -lm  -Xlinker -export-dynamic -Wl,-O1 -Wl,-Bsymbolic-functions 
+	gcc object.o python_module.o column_matrix.o python_script.c -o python_script -L/usr/lib/python3.6/config-3.6m-x86_64-linux-gnu -L/usr/lib -lpython3.6m -lpthread -ldl  -lutil -lm  -Xlinker -export-dynamic -Wl,-O1 -Wl,-Bsymbolic-functions
+
+python_save.o: python_save.h python_save.c
+	gcc python_save.c -c -I/usr/include/python3.6m -I/usr/include/python3.6m  -Wno-unused-result -Wsign-compare -g -fdebug-prefix-map=/build/python3.6-mTGOPz/python3.6-3.6.0~b2=. -fstack-protector-strong -Wformat -Werror=format-security  -DNDEBUG -g -fwrapv -O3 -Wall -Wstrict-prototypes -lpthread -lm
+
+save_script: save_script.c python_save.o object.o column_matrix.o
+	gcc column_matrix.o object.o save_script.c python_save.o -o save_script -L/usr/lib/python3.6/config-3.6m-x86_64-linux-gnu -L/usr/lib -lpython3.6m -lpthread -ldl  -lutil -lm  -Xlinker -export-dynamic -Wl,-O1 -Wl,-Bsymbolic-functions
 
 gui.o: gui.c gui.h
 	gcc gui.c -c `pkg-config --cflags --libs gtk+-3.0` -lpthread
@@ -31,4 +37,4 @@ pyrule: gui.o object.o column_matrix.o common.o compute_thread.o queue.o modifie
 	gcc main.c gui.o object.o column_matrix.o common.o compute_thread.o queue.o modified.o -o pyrule `pkg-config --cflags --libs gtk+-3.0` -lpthread -lm
 
 clean:
-	rm -f pyrule gui.o message_queue.o object.o column_matrix.o common.o python_module.o compute_thread.o queue.o python_script modified.o
+	rm -f pyrule gui.o message_queue.o object.o column_matrix.o common.o python_module.o compute_thread.o queue.o python_script modified.o python_save.o save_script

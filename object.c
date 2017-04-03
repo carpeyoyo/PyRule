@@ -438,3 +438,47 @@ Object *Object_From_File(int fd){
     
   return o;
 }
+
+void Object_ModifyPointsFromMatrices(Object *o){
+  // Modifies all points in all surfaces in this Object using the current model and model_angle matrices
+  // Pre: Valid pointer to Object structure.
+  // Post: points and normals will have been multiplied by Object's matrices.
+  Surface *current;
+  size_t i,j,k;
+  size_t iterations;
+  float pt[4];
+  float answer[4];
+  if (o != NULL){
+    pt[4] = 1.0;
+    for (i=0; i<o->current_size; i++){
+      current = o->surfaces[i];
+      // points array
+      if (current->points != NULL){
+	iterations = current->points_size / 3;
+	k = 0;
+	for (j=0; j<iterations; j++){
+	  pt[0] = current->points[k];
+	  pt[1] = current->points[(k+1)];
+	  pt[2] = current->points[(k+2)];
+	  FourByFour_FourByOne(o->model,pt,answer);
+	  current->points[k] = answer[0];
+	  k++;
+	  current->points[k] = answer[1];
+	  k++;
+	  current->points[k] = answer[2];
+	  k++;
+	}
+      }
+      // normal
+      if (current->normal != NULL){
+	pt[0] = current->normal[0];
+	pt[1] = current->normal[1];
+	pt[2] = current->normal[2];
+	FourByFour_FourByOne(o->model_angle,pt,answer);
+	current->normal[0] = answer[0];
+	current->normal[1] = answer[1];
+	current->normal[2] = answer[2];
+      }
+    }
+  }
+}

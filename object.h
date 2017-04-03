@@ -45,5 +45,6 @@ Object *Object_CreateCopy(Object *o);
 void Object_ModifyModel(Object *o, float *matrix);
 void Object_ModifyModelAngle(Object *o, float *matrix);
 void Object_To_File(Object *o, int fd, int state);
+void Object_ModifyPointsFromMatrices(Object *o);
 
 #endif

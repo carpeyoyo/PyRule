@@ -1,5 +1,5 @@
 // Joshua Mazur (carpeyoyo.github.io)
-// Last Edited: Mar. 30, 2017
+// Last Edited: April 2, 2017
 // Code for GUI interface.
 // See included License file for license
 
@@ -58,6 +58,8 @@ AppInfo *AppInfoSetup(void){
   info->file_stderr = -1;
   info->pipefd[0] = -1;
   info->pipefd[1] = -1;
+  info->savepipefd[0] = -1;
+  info->savepipefd[1] = -1;
   pipe(info->pipefd);
   // Settings read end file status flag as nonblocking
   flags = fcntl(info->pipefd[0],F_GETFL); 
@@ -136,6 +138,12 @@ void AppInfoCleanup(AppInfo *info){
     }
     if (info->pipefd[1] != -1){
       close(info->pipefd[1]);
+    }
+    if (info->savepipefd[0] != -1){
+      close(info->savepipefd[0]);
+    }
+    if (info->savepipefd[1] != -1){
+      close(info->savepipefd[1]);
     }
 
     // Modified points
@@ -232,8 +240,13 @@ void gtk_setup(int argc, char **argv, AppInfo *info){
   info->save_svg_button = (GtkButton *) GTK_WIDGET(gtk_builder_get_object(builder,"save_svg_button"));
   g_signal_connect(info->save_svg_button,"clicked",G_CALLBACK(save_svg_button_function),(void *)info);
 
+  // Save PNG Button
   info->save_png_button = (GtkButton *) GTK_WIDGET(gtk_builder_get_object(builder,"save_png_button"));
   g_signal_connect(info->save_png_button,"clicked",G_CALLBACK(save_png_button_function),(void *)info);
+
+  // Save STL Button
+  info->save_stl_button = (GtkButton *) GTK_WIDGET(gtk_builder_get_object(builder,"save_stl_button"));
+  g_signal_connect(info->save_stl_button,"clicked",G_CALLBACK(save_stl_button_function),(void *)info);
 
   // Positive X Axis Button
   info->positive_x_axis_button = (GtkButton *) GTK_WIDGET(gtk_builder_get_object(builder,"positive_x_axis_button"));
@@ -343,6 +356,8 @@ void execute_button_function(GtkButton *widget, gpointer g_data){
   // Working directory
   working_directory = (char *) calloc(sizeof(char),1000);
   getcwd(working_directory,999);
+
+  // Process path
   size = strlen(working_directory) + 20;
   argv[0] = (char *) calloc(sizeof(char),size);
   strcpy(argv[0],working_directory);
@@ -468,17 +483,50 @@ void program_output_copy_button_function(GtkButton *widget, gpointer g_data){
   g_free(buffer);
 }
 
+char *common_file_chooser_dialog(const char *title, const char *default_filename, AppInfo *info){
+  // Common dialog setup for saving a file
+  // Returned string should be freed using g_free(filename).
+  // Returns NULL if accept button is not pressed.
+  GtkWidget *dialog;
+  GtkFileChooser *chooser;
+  GtkFileChooserAction action;
+  char *filename;
+  gint status;
+
+  filename = NULL;
+  
+  action = GTK_FILE_CHOOSER_ACTION_SAVE;
+  dialog = gtk_file_chooser_dialog_new (title,
+					(GtkWindow *)info->window,
+					action,
+					"Cancel",
+					GTK_RESPONSE_CANCEL,
+					"Save",
+					GTK_RESPONSE_ACCEPT,
+					NULL);
+  
+  chooser = GTK_FILE_CHOOSER(dialog);
+  gtk_file_chooser_set_do_overwrite_confirmation(chooser,TRUE);
+  gtk_file_chooser_set_filename(chooser,default_filename);
+  
+  status = gtk_dialog_run(GTK_DIALOG(dialog));
+  if (status == GTK_RESPONSE_ACCEPT){
+    filename = gtk_file_chooser_get_filename(chooser);
+  }
+
+  // Destroy Dialog
+  gtk_widget_destroy(dialog);  
+
+  return filename;  
+}
+
 void save_svg_button_function(GtkButton *widget, gpointer g_data){
   // Function to save current canvas as SVG
   AppInfo *info;
   cairo_surface_t *svg_surface;
   cairo_t *svg_cr;
   int x,y;
-  GtkWidget *dialog;
-  GtkFileChooser *chooser;
-  gint status;
   char *filename;
-  GtkFileChooserAction action;
   List_Modified *list;
   size_t i;
   Modified *mod;
@@ -492,95 +540,129 @@ void save_svg_button_function(GtkButton *widget, gpointer g_data){
     x = info->drawarea_width;
     y = info->drawarea_height;
     
-    // Save dialog
-    action = GTK_FILE_CHOOSER_ACTION_SAVE;
-    dialog = gtk_file_chooser_dialog_new ("Save File",
-					  (GtkWindow *)info->window,
-					  action,
-					  "Cancel",
-					  GTK_RESPONSE_CANCEL,
-					  "Save",
-					  GTK_RESPONSE_ACCEPT,
-					  NULL);
-    
-    chooser = GTK_FILE_CHOOSER(dialog);
-    gtk_file_chooser_set_do_overwrite_confirmation(chooser,TRUE);
-    gtk_file_chooser_set_filename(chooser,"test.svg");
-    
-    status = gtk_dialog_run(GTK_DIALOG(dialog));
-    if (status == GTK_RESPONSE_ACCEPT){
-      filename = gtk_file_chooser_get_filename(chooser);
+    // Filename
+    filename = common_file_chooser_dialog("Save SVG","untitled.svg",info);
+    if (filename != NULL){
+      // SVG
+      svg_surface = cairo_svg_surface_create(filename,(double) x, (double) y);
+      svg_cr = cairo_create(svg_surface);
       
-      if (filename != NULL){
-	// SVG
-	svg_surface = cairo_svg_surface_create(filename,(double) x, (double) y);
-	svg_cr = cairo_create(svg_surface);
-
-	for (i=0; i<list->array_current_size; i++){
-	  mod = list->array[i];
-	  cairo_set_source_rgb(svg_cr,mod->red,mod->green,mod->blue);
-	  cairo_move_to(svg_cr,mod->x1,mod->y1);
-	  cairo_line_to(svg_cr,mod->x2,mod->y2);
-	  cairo_line_to(svg_cr,mod->x3,mod->y3);
-	  cairo_close_path(svg_cr);
-	  cairo_fill(svg_cr);
-	}
-	
-	cairo_destroy(svg_cr);
-	cairo_surface_destroy(svg_surface);
-	
-	// Free filename
-	g_free(filename);
+      for (i=0; i<list->array_current_size; i++){
+	mod = list->array[i];
+	cairo_set_source_rgb(svg_cr,mod->red,mod->green,mod->blue);
+	cairo_move_to(svg_cr,mod->x1,mod->y1);
+	cairo_line_to(svg_cr,mod->x2,mod->y2);
+	cairo_line_to(svg_cr,mod->x3,mod->y3);
+	cairo_close_path(svg_cr);
+	cairo_fill(svg_cr);
       }
+      
+      cairo_destroy(svg_cr);
+      cairo_surface_destroy(svg_surface);
+      
+      // Free filename
+      g_free(filename);
     }
-    
-    // Destroy Dialog
-    gtk_widget_destroy(dialog);  
   }
 }
+
 
 void save_png_button_function(GtkButton *widget, gpointer g_data){
   // Function saves current canvas as png.
   AppInfo *info;
-  GtkWidget *dialog;
-  GtkFileChooser *chooser;
-  gint status;
   char *filename;
-  GtkFileChooserAction action;
 
   info = (AppInfo *) g_data;
 
   if (info->canvas != NULL){    
     // Save dialog
-    action = GTK_FILE_CHOOSER_ACTION_SAVE;
-    dialog = gtk_file_chooser_dialog_new ("Save PNG File",
-					  (GtkWindow *)info->window,
-					  action,
-					  "Cancel",
-					  GTK_RESPONSE_CANCEL,
-					  "Save",
-					  GTK_RESPONSE_ACCEPT,
-					  NULL);
-    
-    chooser = GTK_FILE_CHOOSER(dialog);
-    gtk_file_chooser_set_do_overwrite_confirmation(chooser,TRUE);
-    gtk_file_chooser_set_filename(chooser,"test.png");
-    
-    status = gtk_dialog_run(GTK_DIALOG(dialog));
-    if (status == GTK_RESPONSE_ACCEPT){
-      filename = gtk_file_chooser_get_filename(chooser);
+    filename = common_file_chooser_dialog("Save PNG","untitled.png",info);
       
-      if (filename != NULL){
-	// PNG
-	cairo_surface_write_to_png(info->canvas,filename);
-	
-	// Free filename
-	g_free(filename);
-      }
+    if (filename != NULL){
+      // PNG
+      cairo_surface_write_to_png(info->canvas,filename);
+      
+      // Free filename
+      g_free(filename);
     }
+  }
+}
+
+void save_stl_button_function(GtkButton *widget, gpointer g_data){
+  // Calls child process for saving points using STL format
+  AppInfo *info;
+  gboolean status;
+
+  size_t i;
+  
+  char **argv;
+  char *working_directory;
+  size_t size;
+  int pid;
+  int message;
+
+  char *save_name;
+  
+  info = (AppInfo *) g_data;
+
+  save_name = common_file_chooser_dialog("Save STL file","Untitled.stl",info);
+
+  if (save_name != NULL){    
+    pipe(info->savepipefd);
     
-    // Destroy Dialog
-    gtk_widget_destroy(dialog);  
+    argv = (char **) calloc(sizeof(char *),5);
+    
+    // Working directory
+    working_directory = (char *) calloc(sizeof(char),1000);
+    getcwd(working_directory,999);
+    
+    // Process path
+    size = strlen(working_directory) + 21;
+    argv[0] = (char *) calloc(sizeof(char),size);
+    strcpy(argv[0],working_directory);
+    strcat(argv[0],"/save_script");
+    
+    // Filepath
+    argv[1] = (char *) calloc(sizeof(char),size);
+    strcpy(argv[1],working_directory);
+    strcat(argv[1],"/SaveScripts/stl.py");
+    
+    // File Descriptor
+    argv[2] = (char *) calloc(sizeof(char),100);
+    snprintf(argv[2],99,"%d",info->savepipefd[0]);
+
+    // Name of file to save
+    argv[3] = save_name;
+    
+    // NULL end
+    argv[4] = NULL;
+    
+    status = g_spawn_async_with_pipes(working_directory,argv,NULL,G_SPAWN_DO_NOT_REAP_CHILD | G_SPAWN_LEAVE_DESCRIPTORS_OPEN,NULL,NULL,&pid,NULL,NULL,NULL,NULL);
+    if (status == FALSE){
+      printf("Error opening save process.\n");
+    }
+    else{
+      g_child_watch_add(pid,save_process_function,g_data);
+      // Sending Data
+      if (info->objects_size > 0){
+	Object_To_File(info->objects[0],info->savepipefd[1],OBJECT_NEW);
+	i = 1;
+	while (i < info->objects_size){
+	  Object_To_File(info->objects[i],info->savepipefd[1],OBJECT_ANOTHER);
+	  i++;
+	}
+      }
+      // End Data
+      message = OBJECT_END;
+      write(info->savepipefd[1],&message,sizeof(int));
+    }
+
+    free(argv[0]);
+    free(argv[1]);
+    free(argv[2]);
+    g_free(argv[3]);
+    free(argv);
+    free(working_directory);
   }
 }
 
@@ -1374,6 +1456,25 @@ void child_process_function(GPid pid, gint status, gpointer g_data){
   
   g_spawn_close_pid(pid);
 }
+
+void save_process_function(GPid pid, gint status, gpointer g_data){
+  // Called when save process exits.
+  AppInfo *info;
+
+  info = (AppInfo *) g_data;
+
+  if (info->savepipefd[0] != -1){
+    close(info->savepipefd[0]);
+    info->savepipefd[0] = -1;
+  }
+  if (info->savepipefd[1] != -1){
+    close(info->savepipefd[1]);
+    info->savepipefd[1] = -1;
+  }
+  
+  g_spawn_close_pid(pid);
+}
+
 
 // Timeout Function
 gboolean timeout_function(gpointer user_data){

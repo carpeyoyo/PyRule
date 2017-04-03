@@ -1,5 +1,5 @@
 // Joshua Mazur (carpeyoyo.github.io)
-// Last Edited: Mar. 30, 2017
+// Last Edited: April 1, 2017
 // Code for GUI interface.
 // See included License file for license
 
@@ -26,6 +26,7 @@ typedef struct{
   GtkButton *output_copy_button;
   GtkButton *save_svg_button;
   GtkButton *save_png_button;
+  GtkButton *save_stl_button;
   GtkButton *positive_x_axis_button;
   GtkButton *negative_x_axis_button;
   GtkButton *positive_y_axis_button;
@@ -62,6 +63,7 @@ typedef struct{
   int pipefd[2];
   int file_stdout;
   int file_stderr;
+  int savepipefd[2];
   GIOChannel *pipefd_channel;
   GIOChannel *file_stdout_channel;
   GIOChannel *file_stderr_channel;
@@ -96,6 +98,8 @@ void program_output_copy_button_function(GtkButton *widget, gpointer g_data);
 void save_svg_button_function(GtkButton *widget, gpointer g_data);
 void save_png_button_function(GtkButton *widget, gpointer
 g_data);
+void save_stl_button_function(GtkButton *widget, gpointer
+g_data);
 void positive_x_axis_button_function(GtkButton *widget, gpointer g_data);
 void negative_x_axis_button_function(GtkButton *widget, gpointer g_data);
 void positive_y_axis_button_function(GtkButton *widget, gpointer g_data);
@@ -126,6 +130,7 @@ void channel_stdout_destroy(gpointer data);
 void channel_stderr_destroy(gpointer data);
 // Child Process Functions
 void child_process_function(GPid pid, gint status, gpointer g_data);
+void save_process_function(GPid pid, gint status, gpointer g_data);
 // Timeout Function
 gboolean timeout_function(gpointer user_data);
 
