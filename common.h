@@ -20,6 +20,7 @@ typedef struct{
   float *projection; // Projection Matrix
   float *view_angle; // View Matrix for angle
   float *view_trans; // View Matrix for camera translation
+  float *view_scale;
   // Objects Array
   Object **objects;
   size_t objects_size;

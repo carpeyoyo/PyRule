@@ -293,6 +293,83 @@ PyObject *PyRuleObject_color(PyRuleObject *self, PyObject *args){
   Py_RETURN_NONE;
 }
 
+static PyObject *PyRuleObject_color_surface(PyRuleObject *self, PyObject *args){
+  // PyRule Object change color of specific surface
+  // Pre: Argument passes index of surface, red, green, and blue
+  // Post: Returns None
+  size_t index;
+  float r,g,b;
+  Object *obj;
+  Surface *surface;
+
+  if (PyArg_ParseTuple(args,"kfff",&index,&r,&g,&b)){
+    obj = self->obj;
+    if ((0 <= index) && (index < obj->current_size)){
+      surface = obj->surfaces[index];
+      surface->red = r;
+      surface->green = g;
+      surface->blue = b;
+    }
+  }
+
+  Py_RETURN_NONE;
+}
+
+static PyObject *PyRuleObject_color_all_surfaces(PyRuleObject *self, PyObject *args){
+  // PyRule Object change color of all surfaces to given color
+  // Pre: Argument passes red, green, blue
+  // Post: Returns None
+  float r,g,b;
+  Object *obj;
+  Surface *surface;
+  size_t i;
+
+  if (PyArg_ParseTuple(args,"fff",&r,&g,&b)){
+    obj = self->obj;
+    for (i=0; i<obj->current_size; i++){
+      surface = obj->surfaces[i];
+      surface->red = r;
+      surface->green = g;
+      surface->blue = b;
+    }
+  }
+
+  Py_RETURN_NONE;
+}
+
+PyObject *PyRuleObject_copy_values(PyRuleObject *self, PyObject *args){
+  // PyRule Object copy all values from another
+  // Pre: args contains a PyRuleObject whose value are to be copied
+  // Post: Returns None
+  PyObject *temp;
+  PyRuleObject *other;
+
+  if (PyArg_ParseTuple(args,"O",&temp)){
+    if (temp != NULL){
+      other = (PyRuleObject *) temp;
+      // Copying object
+      self->obj = Object_CreateCopy(other->obj);
+      // show value
+      self->show_value = other->show_value;
+      // Colors
+      self->red = other->red;
+      self->green = other->green;
+      self->blue = other->blue;
+    }
+  }
+
+  Py_RETURN_NONE;
+}
+
+PyObject *PyRuleObject_reset_show(PyRuleObject *self, PyObject *args){
+  // PyRule Object resets show value (used when object is copied.
+  // Pre: Retrieves no arguments
+  // Post: show_value is reset to -1. Returns None
+  self->show_value = -1;
+
+  Py_RETURN_NONE;  
+}
+
 static PyMethodDef PyRuleObject_methods[] = {
   {"size",(PyCFunction)PyRuleObject_size,METH_NOARGS,PyDoc_STR("Returns number of triangle surfaces.")},
   {"get",(PyCFunction)PyRuleObject_get,METH_VARARGS,PyDoc_STR("Returns three point tuple.")},
@@ -305,6 +382,10 @@ static PyMethodDef PyRuleObject_methods[] = {
   {"rotatey",(PyCFunction)PyRuleObject_rotatey,METH_VARARGS,PyDoc_STR("Rotates Object around y axis")},
   {"rotatez",(PyCFunction)PyRuleObject_rotatez,METH_VARARGS,PyDoc_STR("Rotates Object around z axis")},
   {"color",(PyCFunction)PyRuleObject_color,METH_VARARGS,PyDoc_STR("Object color: red, green, blue.")},
+  {"color_surface",(PyCFunction)PyRuleObject_color_surface,METH_VARARGS,PyDoc_STR("Change color of specific surface: index, red, green, blue.")},
+  {"color_all_surfaces",(PyCFunction)PyRuleObject_color_all_surfaces,METH_VARARGS,PyDoc_STR("Change color of all surfaces currently in Object: red, green, blue.")},
+  {"_copy_values",(PyCFunction)PyRuleObject_copy_values,METH_VARARGS,PyDoc_STR("Copies values for child class's deepcopy")},
+  {"_reset_show",(PyCFunction)PyRuleObject_reset_show,METH_NOARGS,PyDoc_STR("Resets show for child class's deepcopy")},
   {NULL,NULL,0,NULL},
 };
 

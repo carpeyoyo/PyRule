@@ -14,6 +14,7 @@ ComputeInfoTo *ComputeInfoTo_Setup(Queue *to, Queue *from){
   info->projection = NULL;
   info->view_angle = NULL;
   info->view_trans = NULL;
+  info->view_scale = NULL;
   info->objects = NULL;
   info->objects_size = 0;
   info->to = to;
@@ -33,6 +34,9 @@ void *ComputeInfoTo_Cleanup(ComputeInfoTo *info){
     }
     if (info->view_trans != NULL){
       free(info->view_trans);
+    }
+    if (info->view_scale != NULL){
+      free(info->view_scale);
     }
     if (info->objects != NULL){
       for (i=0; i<info->objects_size; i++){

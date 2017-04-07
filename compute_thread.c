@@ -47,7 +47,7 @@ void *compute_thread(void *arg){
   Normalize(light,3);
   normal[3] = 1.0;
   
-  mvp_array = (float **) calloc(sizeof(float *),4);
+  mvp_array = (float **) calloc(sizeof(float *),5);
   mvp_array[0] = NULL;
 
   while(1){
@@ -66,9 +66,10 @@ void *compute_thread(void *arg){
     half_width = width / 2.0;
     half_height = height / 2.0;
     // Matrices
-    mvp_array[1] = view_angle = ReturnCopyMatrix(to->view_angle);
-    mvp_array[2] = ReturnCopyMatrix(to->view_trans);
-    mvp_array[3] = ReturnCopyMatrix(to->projection);
+    mvp_array[1] = to->view_scale;
+    mvp_array[2] = view_angle = to->view_angle;
+    mvp_array[3] = to->view_trans;
+    mvp_array[4] = to->projection;
     // Objects
     size = to->objects_size;
     if (size > 0){
@@ -81,7 +82,7 @@ void *compute_thread(void *arg){
 
 	// MVP
 	mvp_array[0] = current->model;
-	mvp = MultipleMatrices(mvp_array,4);
+	mvp = MultipleMatrices(mvp_array,5);
 
 	// MV angle
 	FourByFour_FourByFour(view_angle,current->model_angle,angle);
@@ -162,21 +163,9 @@ void *compute_thread(void *arg){
       from->height = height;
       from->modified_points = list;
       Queue_Add(info->from,(void *)from);
-      
+
       // Cleanup To
       ComputeInfoTo_Cleanup(to);
-    }
-      
-    //// Cleanup
-    // Matrices
-    if (mvp_array[1] != NULL){
-      free(mvp_array[1]);
-    }
-    if (mvp_array[2] != NULL){
-      free(mvp_array[2]);
-    }
-    if (mvp_array[3] != NULL){
-      free(mvp_array[3]);
     }
   }
 

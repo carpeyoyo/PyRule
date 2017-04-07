@@ -42,6 +42,8 @@ AppInfo *AppInfoSetup(void){
   info->projection = NULL;
   info->view_angle = IdentityMatrix();
   info->view_trans = IdentityMatrix();
+  info->view_scale = IdentityMatrix();
+  info->scale_value = 1.0;
   info->objects = NULL;
   info->objects_size = 0;
   info->objects_max_size = 0;
@@ -104,6 +106,9 @@ void AppInfoCleanup(AppInfo *info){
     }
     if (info->view_trans != NULL){
       free(info->view_trans);
+    }
+    if (info->view_scale != NULL){
+      free(info->view_scale);
     }
     if (info->objects != NULL){
       for (i=0; i<info->objects_size; i++){
@@ -173,6 +178,9 @@ void AppInfo_AddDraw(AppInfo *info){
     if (info->view_trans != NULL){
       to->view_trans = ReturnCopyMatrix(info->view_trans);
     }
+    if (info->view_scale != NULL){
+      to->view_scale = ReturnCopyMatrix(info->view_scale);
+    }
     if (info->objects != NULL){
       to->objects = (Object **) calloc(sizeof(Object *),info->objects_size);
       to->objects_size = info->objects_size;
@@ -218,6 +226,14 @@ void gtk_setup(int argc, char **argv, AppInfo *info){
   temp = GTK_WIDGET(gtk_builder_get_object(builder,"arguments_textview"));
   info->argument_textbuffer = gtk_text_view_get_buffer((GtkTextView *)temp);
   g_signal_connect((GtkTextBuffer *)info->argument_textbuffer,"end-user-action",G_CALLBACK(BufferOnlySpaces),NULL);
+
+  // Scale Textview/Textbuffer
+  info->scale_textview = (GtkTextView *) GTK_WIDGET(gtk_builder_get_object(builder,"scale_textview"));
+  gtk_text_view_set_justification(info->scale_textview,GTK_JUSTIFY_RIGHT);
+  info->scale_textbuffer = gtk_text_view_get_buffer(info->scale_textview);
+  g_signal_connect(info->scale_textbuffer,"end-user-action",G_CALLBACK(BufferNumberOnly),(void *)info);
+  set_textbuffer_from_float(info->scale_textbuffer,info->scale_value);
+  g_signal_connect(info->scale_textview,"key_press_event",G_CALLBACK(scale_key_press_function),(void *)info);
 
   // Execute Button
   info->execute_button = (GtkButton *) GTK_WIDGET(gtk_builder_get_object(builder,"execute_button"));
@@ -280,6 +296,11 @@ void gtk_setup(int argc, char **argv, AppInfo *info){
   gtk_toggle_button_set_active((GtkToggleButton *)info->orthographic_button,TRUE);
   g_signal_connect(info->orthographic_button,"toggled",G_CALLBACK(orthographic_button_function),(void *)info);
   g_signal_connect(info->perspective_button,"toggled",G_CALLBACK(perspective_button_function),(void *)info);
+
+  // Scale Button
+  info->scale_button = (GtkButton *) GTK_WIDGET(gtk_builder_get_object(builder,"scale_button"));
+  g_signal_connect(info->scale_button,"clicked",G_CALLBACK(scale_button_function),(void *)info);
+  gtk_widget_set_sensitive((GtkWidget *)info->scale_button,FALSE);
  
   // Program File chooser
   temp = GTK_WIDGET(gtk_builder_get_object(builder,"program_file_chooser"));
@@ -810,6 +831,32 @@ void perspective_button_function(GtkButton *widget, gpointer g_data){
   }
 }
 
+void scale_button_function(GtkButton *widget, gpointer g_data){
+  // Scale Button update
+  AppInfo *info;
+  
+  
+  info = (AppInfo *) g_data;
+
+  info->scale_value = retrieve_float_from_textbuffer(info->scale_textbuffer);
+
+  if (isnan(info->scale_value)){
+    info->scale_value = 1.0;
+    set_textbuffer_from_float(info->scale_textbuffer,info->scale_value);
+  }
+
+  if (info->view_scale != NULL){
+    free(info->view_scale);
+    info->view_scale = NULL;
+  }
+
+  info->view_scale = ScaleMatrix(info->scale_value,info->scale_value,info->scale_value);
+
+  AppInfo_AddDraw(info);
+  
+  gtk_widget_set_sensitive((GtkWidget *)info->scale_button,FALSE);
+}
+
 // File Choosers
 void python_file_chooser_file_set(GtkWidget *widget, gpointer g_data){
   // Python file to be executed.
@@ -920,7 +967,6 @@ gboolean drawarea_key_press_function(GtkWidget *widget, GdkEvent *event, gpointe
   gint answer;
   GdkEventKey *key_event;
   float *angle;
-  float *translation;
   AppInfo *info;
   int call_draw;
   float x,y,z;
@@ -932,7 +978,6 @@ gboolean drawarea_key_press_function(GtkWidget *widget, GdkEvent *event, gpointe
   call_draw = 0;
   
   angle = NULL;
-  translation = NULL;
 
   key_event = (GdkEventKey *) event;
   switch(key_event->keyval){
@@ -1170,6 +1215,36 @@ void axis_draw_area_draw_function(GtkWidget *widget, cairo_t *cr, gpointer g_dat
   }
 }
 
+// Textview Functions
+gboolean scale_key_press_function(GtkWidget *widget, GdkEvent *event, gpointer g_data){
+  gint answer;
+  GdkEventKey *key_event;
+  AppInfo *info;
+
+  info = (AppInfo *) g_data;
+  
+  answer = FALSE;  
+  
+  key_event = (GdkEventKey *) event;
+  switch(key_event->keyval){
+  case(GDK_KEY_Return):
+    answer = TRUE;
+    gtk_widget_set_sensitive((GtkWidget *)info->scale_button,FALSE);
+    info->scale_value = retrieve_float_from_textbuffer(info->scale_textbuffer);
+    if (isnan(info->scale_value)){
+      info->scale_value = 1.0;
+      set_textbuffer_from_float(info->scale_textbuffer,info->scale_value);
+    }
+    if (info->view_scale != NULL){
+      free(info->view_scale);
+    }
+    info->view_scale = ScaleMatrix(info->scale_value,info->scale_value,info->scale_value);
+    AppInfo_AddDraw(info);
+  }
+
+  return answer;
+}
+
 // Textbuffer functions
 void BufferOnlySpaces(GtkTextBuffer *textbuffer, gpointer user_data){
   // Removes any whitespace other then spaces."
@@ -1217,6 +1292,8 @@ void BufferOnlySpaces(GtkTextBuffer *textbuffer, gpointer user_data){
 void BufferNumberOnly(GtkTextBuffer *textbuffer, gpointer user_data){
   // Called when contents of buffer has changed to make sure only numbers are added.
   // Post: Make changes to textbuffer.
+  // Sets Scale button to visible at end. If this function is eventually used by something other then
+  // the scale textview / button pair then this should be addressed.
   GtkTextIter start,end;
   gchar *buffer;
   gchar *output;
@@ -1228,6 +1305,9 @@ void BufferNumberOnly(GtkTextBuffer *textbuffer, gpointer user_data){
   GtkTextMark *mark;
   GtkTextIter iter;
   gint offset;
+  AppInfo *info;
+
+  info = (AppInfo *) user_data;
   
   mark = gtk_text_buffer_get_insert(textbuffer);
   gtk_text_buffer_get_iter_at_mark(textbuffer,&iter,mark);
@@ -1254,10 +1334,6 @@ void BufferNumberOnly(GtkTextBuffer *textbuffer, gpointer user_data){
 	j++;
 	decimal++;
       }
-      else if ((j == 0) && ((temp == '+') || (temp == '-'))){
-	output[j] = temp;
-	j++;
-      }
       else{
 	offset = offset - 1;
       }
@@ -1270,6 +1346,8 @@ void BufferNumberOnly(GtkTextBuffer *textbuffer, gpointer user_data){
 
   gtk_text_buffer_get_iter_at_offset(textbuffer,&iter,offset);
   gtk_text_buffer_place_cursor(textbuffer,&iter);
+
+  gtk_widget_set_sensitive((GtkWidget *)info->scale_button,TRUE);
 }
 
 float retrieve_float_from_textbuffer(GtkTextBuffer *text_buffer){

@@ -19,6 +19,8 @@ typedef struct{
   GtkTextView *message_textview;
   GtkTextBuffer *message_textbuffer;
   GtkTextBuffer *argument_textbuffer;
+  GtkTextBuffer *scale_textbuffer;
+  GtkTextView *scale_textview;
   // Buttons
   GtkButton *execute_button;
   GtkButton *interrupt_button;
@@ -35,6 +37,7 @@ typedef struct{
   GtkButton *negative_z_axis_button;
   GtkRadioButton *orthographic_button;
   GtkRadioButton *perspective_button;
+  GtkButton *scale_button;
   // Draw Area
   GtkDrawingArea *drawarea;
   int drawarea_width;
@@ -55,6 +58,8 @@ typedef struct{
   float *projection;
   float *view_angle;
   float *view_trans;
+  float *view_scale;
+  float scale_value;
   Object **objects;
   size_t objects_size;
   size_t objects_max_size;
@@ -108,6 +113,7 @@ void positive_z_axis_button_function(GtkButton *widget, gpointer g_data);
 void negative_z_axis_button_function(GtkButton *widget, gpointer g_data);
 void orthographic_button_function(GtkButton *widget, gpointer g_data);
 void perspective_button_function(GtkButton *widget, gpointer g_data);
+void scale_button_function(GtkButton *widget, gpointer g_data);
 // File Choosers 
 void python_file_chooser_file_set(GtkWidget *widget, gpointer g_data);
 void python_working_directory_chooser_file_set(GtkWidget *widget, gpointer g_data);
@@ -118,6 +124,8 @@ gboolean drawarea_key_press_function(GtkWidget *widget, GdkEvent *event, gpointe
 void draw_area_button_press_function(GtkWidget *widget, GdkEvent *event, gpointer g_data);
 // Axis Draw Area
 void axis_draw_area_draw_function(GtkWidget *widget, cairo_t *cr, gpointer g_data);
+// Textview functions
+gboolean scale_key_press_function(GtkWidget *widget, GdkEvent *event, gpointer g_data);
 // Textbuffer functions
 void BufferOnlySpaces(GtkTextBuffer *textbuffer, gpointer user_data);
 void BufferNumberOnly(GtkTextBuffer *textbuffer, gpointer user_data);

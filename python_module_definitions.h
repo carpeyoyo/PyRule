@@ -34,6 +34,10 @@ static PyObject *PyRuleObject_rotatex(PyRuleObject *self, PyObject *args);
 static PyObject *PyRuleObject_rotatey(PyRuleObject *self, PyObject *args);
 static PyObject *PyRuleObject_rotatez(PyRuleObject *self, PyObject *args);
 static PyObject *PyRuleObject_color(PyRuleObject *self, PyObject *args);
+static PyObject *PyRuleObject_color_surface(PyRuleObject *self, PyObject *args);
+static PyObject *PyRuleObject_color_all_surfaces(PyRuleObject *self, PyObject *args);
+static PyObject *PyRuleObject_copy_values(PyRuleObject *self, PyObject *args);
+static PyObject *PyRuleObject_reset_show(PyRuleObject *self, PyObject *args);
 
 // PyRule Standard Output Object
 typedef struct{
