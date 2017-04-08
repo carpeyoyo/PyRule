@@ -29,6 +29,7 @@ typedef struct{
   GtkButton *save_svg_button;
   GtkButton *save_png_button;
   GtkButton *save_stl_button;
+  GtkButton *custom_save_button;
   GtkButton *positive_x_axis_button;
   GtkButton *negative_x_axis_button;
   GtkButton *positive_y_axis_button;
@@ -47,6 +48,7 @@ typedef struct{
   // Program Strings 
   char *file_path;
   char *directory_path;
+  char *custom_save_path;
   // ComputeThread
   ComputeThreadInfo *compute_info;
   // Queues
@@ -100,11 +102,19 @@ void execute_button_function(GtkButton *widget, gpointer g_data);
 void interrupt_button_function(GtkButton *widget, gpointer g_data);
 void program_output_clear_button_function(GtkButton *widget, gpointer g_data);
 void program_output_copy_button_function(GtkButton *widget, gpointer g_data);
+// Screen Save Buttons
+char *common_file_chooser_dialog(const char *title, const char *default_filename, AppInfo *info);
 void save_svg_button_function(GtkButton *widget, gpointer g_data);
 void save_png_button_function(GtkButton *widget, gpointer
 g_data);
+// Save Button Functions
+void common_save_function(AppInfo *info, const char *dialog_title, const char *dialog_default, const char *file_path);
+void set_save_buttons_grey(AppInfo *info);
+void set_save_buttons_active(AppInfo *info); 
 void save_stl_button_function(GtkButton *widget, gpointer
 g_data);
+void custom_save_button_function(GtkButton *widget, gpointer g_data);
+// Screen control buttons
 void positive_x_axis_button_function(GtkButton *widget, gpointer g_data);
 void negative_x_axis_button_function(GtkButton *widget, gpointer g_data);
 void positive_y_axis_button_function(GtkButton *widget, gpointer g_data);
@@ -117,6 +127,7 @@ void scale_button_function(GtkButton *widget, gpointer g_data);
 // File Choosers 
 void python_file_chooser_file_set(GtkWidget *widget, gpointer g_data);
 void python_working_directory_chooser_file_set(GtkWidget *widget, gpointer g_data);
+void custom_save_chooser_file_set(GtkWidget *widget, gpointer g_data);
 // Draw Area Functions
 gboolean draw_area_draw_function(GtkWidget *widget, cairo_t *cr, gpointer g_data);
 void draw_area_size_allocation_function(GtkWidget *widget, GdkRectangle *allocation, gpointer g_data);

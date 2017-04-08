@@ -16,6 +16,7 @@
 #include <fcntl.h>
 
 #define INCREMENT 0.0174532925
+#define CUSTOM_SAVE_CONFIG_FILE "/.pyrule/custom_save_files.config"
 
 // AppInfo Methods
 AppInfo *AppInfoSetup(void){
@@ -37,6 +38,7 @@ AppInfo *AppInfoSetup(void){
   // Program Strings
   info->file_path = NULL;
   info->directory_path = NULL;
+  info->custom_save_path = NULL;
 
   // Draw Properties
   info->projection = NULL;
@@ -88,6 +90,9 @@ void AppInfoCleanup(AppInfo *info){
     }
     if (info->directory_path != NULL){
       g_free(info->directory_path);
+    }
+    if (info->custom_save_path != NULL){
+      g_free(info->custom_save_path);
     }
 
     // Compute Thread
@@ -264,6 +269,10 @@ void gtk_setup(int argc, char **argv, AppInfo *info){
   info->save_stl_button = (GtkButton *) GTK_WIDGET(gtk_builder_get_object(builder,"save_stl_button"));
   g_signal_connect(info->save_stl_button,"clicked",G_CALLBACK(save_stl_button_function),(void *)info);
 
+  // Custom save button
+  info->custom_save_button = (GtkButton *) GTK_WIDGET(gtk_builder_get_object(builder,"custom_save_button"));
+  g_signal_connect(info->custom_save_button,"clicked",G_CALLBACK(custom_save_button_function),(void *)info);
+
   // Positive X Axis Button
   info->positive_x_axis_button = (GtkButton *) GTK_WIDGET(gtk_builder_get_object(builder,"positive_x_axis_button"));
   g_signal_connect(info->positive_x_axis_button,"clicked",G_CALLBACK(positive_x_axis_button_function),(void *)info);
@@ -301,7 +310,7 @@ void gtk_setup(int argc, char **argv, AppInfo *info){
   info->scale_button = (GtkButton *) GTK_WIDGET(gtk_builder_get_object(builder,"scale_button"));
   g_signal_connect(info->scale_button,"clicked",G_CALLBACK(scale_button_function),(void *)info);
   gtk_widget_set_sensitive((GtkWidget *)info->scale_button,FALSE);
- 
+  
   // Program File chooser
   temp = GTK_WIDGET(gtk_builder_get_object(builder,"program_file_chooser"));
   gtk_file_chooser_set_action((GtkFileChooser *)temp,GTK_FILE_CHOOSER_ACTION_OPEN);
@@ -311,6 +320,11 @@ void gtk_setup(int argc, char **argv, AppInfo *info){
   temp = GTK_WIDGET(gtk_builder_get_object(builder,"working_directory_chooser"));
   gtk_file_chooser_set_action((GtkFileChooser *)temp,GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER);
   g_signal_connect(temp,"file-set",G_CALLBACK(python_working_directory_chooser_file_set),(void *)info);
+
+  // Custom Save File chooser
+  temp = GTK_WIDGET(gtk_builder_get_object(builder,"custom_save_file_chooser"));
+  gtk_file_chooser_set_action((GtkFileChooser *)temp,GTK_FILE_CHOOSER_ACTION_OPEN);
+  g_signal_connect(temp,"file-set",G_CALLBACK(custom_save_chooser_file_set),(void *)info);  
 
   // Draw_area Signals 
   info->drawarea = (GtkDrawingArea *) GTK_WIDGET(gtk_builder_get_object(builder,"draw_area"));
@@ -609,24 +623,22 @@ void save_png_button_function(GtkButton *widget, gpointer g_data){
   }
 }
 
-void save_stl_button_function(GtkButton *widget, gpointer g_data){
+// Save Button Functions and helper functions
+void common_save_function(AppInfo *info,
+			  const char *dialog_title,
+			  const char *dialog_default,
+			  const char *file_path){
   // Calls child process for saving points using STL format
-  AppInfo *info;
   gboolean status;
-
   size_t i;
-  
   char **argv;
   char *working_directory;
   size_t size;
   int pid;
   int message;
-
   char *save_name;
   
-  info = (AppInfo *) g_data;
-
-  save_name = common_file_chooser_dialog("Save STL file","Untitled.stl",info);
+  save_name = common_file_chooser_dialog(dialog_title,dialog_default,info);
 
   if (save_name != NULL){    
     pipe(info->savepipefd);
@@ -638,15 +650,15 @@ void save_stl_button_function(GtkButton *widget, gpointer g_data){
     getcwd(working_directory,999);
     
     // Process path
-    size = strlen(working_directory) + 21;
+    size = strlen(working_directory) + 14;
     argv[0] = (char *) calloc(sizeof(char),size);
     strcpy(argv[0],working_directory);
     strcat(argv[0],"/save_script");
     
     // Filepath
+    size = strlen(file_path) + 1;
     argv[1] = (char *) calloc(sizeof(char),size);
-    strcpy(argv[1],working_directory);
-    strcat(argv[1],"/SaveScripts/stl.py");
+    strcpy(argv[1],file_path);
     
     // File Descriptor
     argv[2] = (char *) calloc(sizeof(char),100);
@@ -663,7 +675,7 @@ void save_stl_button_function(GtkButton *widget, gpointer g_data){
       printf("Error opening save process.\n");
     }
     else{
-      g_child_watch_add(pid,save_process_function,g_data);
+      g_child_watch_add(pid,save_process_function,(void *)info);
       // Sending Data
       if (info->objects_size > 0){
 	Object_To_File(info->objects[0],info->savepipefd[1],OBJECT_NEW);
@@ -687,6 +699,56 @@ void save_stl_button_function(GtkButton *widget, gpointer g_data){
   }
 }
 
+void set_save_buttons_grey(AppInfo *info){
+  // Grey out save buttons
+  gtk_widget_set_sensitive((GtkWidget *)info->save_stl_button,FALSE);
+  gtk_widget_set_sensitive((GtkWidget *)info->custom_save_button,FALSE);
+}
+
+void set_save_buttons_active(AppInfo *info){
+  // Set buttons visible again
+  gtk_widget_set_sensitive((GtkWidget *)info->save_stl_button,TRUE);
+  gtk_widget_set_sensitive((GtkWidget *)info->custom_save_button,TRUE);
+}
+
+void save_stl_button_function(GtkButton *widget, gpointer g_data){
+  // Custom save in STL format
+  AppInfo *info;
+  char *work_directory;
+  char *file_path;
+  size_t size;
+  
+  info = (AppInfo *) g_data;
+
+  if (info->objects_size > 0){
+    // Retrieving file path
+    work_directory = (char *) calloc(sizeof(char),1000);
+    getcwd(work_directory,999);
+    size = strlen(work_directory) + 21;
+    file_path = (char *) calloc(sizeof(char),size);
+    strcpy(file_path,work_directory);
+    free(work_directory);
+    strcat(file_path,"/SaveScripts/stl.py");
+    
+    common_save_function(info,"Save STL File", "untitled.stl",file_path);
+    
+    free(file_path);
+    
+    set_save_buttons_grey(info);
+  }
+}
+
+void custom_save_button_function(GtkButton *widget, gpointer g_data){
+  // Custom save script button
+  AppInfo *info;
+  info = (AppInfo *) g_data;
+  if ((info->custom_save_path != NULL) && (info->objects_size > 0)){
+    common_save_function(info,"Custom Save FILE"," ",info->custom_save_path);
+    set_save_buttons_grey(info);
+  }
+}
+
+// Screen control buttons
 void positive_x_axis_button_function(GtkButton *widget, gpointer g_data){
   // Change view angle from positive x axis
   AppInfo *info;
@@ -882,7 +944,22 @@ void python_working_directory_chooser_file_set(GtkWidget *widget, gpointer g_dat
   }
 
   info->directory_path = gtk_file_chooser_get_filename((GtkFileChooser *)widget);
-}  
+}
+
+void custom_save_chooser_file_set(GtkWidget *widget, gpointer g_data){
+  AppInfo *info;
+
+  info = (AppInfo *) g_data;
+
+  if (info->custom_save_path != NULL){
+    g_free(info->custom_save_path);
+    info->custom_save_path = NULL;
+  }
+
+  info->custom_save_path = gtk_file_chooser_get_filename((GtkFileChooser *)widget);
+
+  fprintf(stdout,"Custom save file set: \"%s\"\n",info->custom_save_path);
+}
 
 // Draw Area Functions
 gboolean draw_area_draw_function(GtkWidget *widget, cairo_t *cr, gpointer g_data){
@@ -1549,6 +1626,8 @@ void save_process_function(GPid pid, gint status, gpointer g_data){
     close(info->savepipefd[1]);
     info->savepipefd[1] = -1;
   }
+
+  set_save_buttons_active(info);
   
   g_spawn_close_pid(pid);
 }
