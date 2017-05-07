@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include "column_matrix.h"
 
 int main(int argc, char **argv){
   int answer;
@@ -19,6 +20,10 @@ int main(int argc, char **argv){
   Object **new;
   Object *temp_object;
   size_t i,j,k;
+  Surface *temp_surface;
+  float pt[4];
+  float *pt_answer;
+  float *pt_answer_current;
   
   answer = EXIT_FAILURE;
 
@@ -77,17 +82,56 @@ int main(int argc, char **argv){
       info->surfaces_size = 0;
       for (i=0; i<info->objects_current_size; i++){
 	temp_object = info->objects[i];
-	Object_ModifyPointsFromMatrices(temp_object);
 	info->surfaces_size += temp_object->current_size;
       }
 
       info->surfaces = (Surface **) calloc(sizeof(Surface *),info->surfaces_size);
-     
+
+      pt[3] = 1.0;
+      
       j = 0;
       for (i=0; i<info->objects_current_size; i++){
 	temp_object = info->objects[i];
 	for (k=0; k<temp_object->current_size; k++){
-	  info->surfaces[j] = temp_object->surfaces[k];
+	  temp_surface = temp_object->surfaces[k];
+
+	  // Answer matrix
+	  pt_answer = (float *) calloc(sizeof(float),10);
+	  pt_answer_current = pt_answer;
+	  
+	  // Points
+	  pt[0] = temp_surface->points[0];
+	  pt[1] = temp_surface->points[1];
+	  pt[2] = temp_surface->points[2];
+	  FourByFour_FourByOne(temp_object->model,pt,pt_answer_current);
+	  pt_answer_current += 3;
+
+	  pt[0] = temp_surface->points[3];
+	  pt[1] = temp_surface->points[4];
+	  pt[2] = temp_surface->points[5];
+	  FourByFour_FourByOne(temp_object->model,pt,pt_answer_current);
+	  pt_answer_current += 3;
+
+	  pt[0] = temp_surface->points[6];
+	  pt[1] = temp_surface->points[7];
+	  pt[2] = temp_surface->points[8];
+	  FourByFour_FourByOne(temp_object->model,pt,pt_answer_current);
+
+	  free(temp_surface->points);
+	  temp_surface->points = pt_answer;
+
+	  // Normals
+	  pt_answer = (float *) calloc(sizeof(float),4);
+	  pt[0] = temp_surface->normal[0];
+	  pt[1] = temp_surface->normal[1];
+	  pt[2] = temp_surface->normal[2];
+	  FourByFour_FourByOne(temp_object->model_angle,pt,pt_answer);
+
+	  free(temp_surface->normal);
+	  temp_surface->normal = pt_answer;
+	  
+	  // Setting surface
+	  info->surfaces[j] = temp_surface;
 	  j++;
 	}
       }
